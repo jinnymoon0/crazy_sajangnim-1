@@ -5,6 +5,7 @@ import type { Product } from "@/types/product";
 import { calculateDiscountPercentage } from "@/lib/utils";
 import { inferCategory } from "@/lib/products/infer-category";
 import { inferGender } from "@/lib/products/infer-gender";
+import { inferBrand } from "@/lib/products/infer-brand";
 
 interface ParseOptions {
   retailerName: string;
@@ -20,6 +21,13 @@ interface ParseOptions {
 interface JsonLdProduct {
   "@type"?: string | string[];
   name?: string;
+
+  brand?:
+    | string
+    | {
+        name?: string;
+      };
+
   image?: string | string[];
   sku?: string;
   productID?: string;
@@ -235,7 +243,6 @@ export async function parseRetailerProductPage({
   fallbackTitle,
   fallbackThumbnail,
   brandSlug,
-  brandName,
   gender,
 }: ParseOptions): Promise<Product | null> {
   const response = await fetch(url, {
@@ -271,6 +278,35 @@ export async function parseRetailerProductPage({
       jsonProduct.name?.trim() ||
       $('meta[property="og:title"]').attr("content")?.trim() ||
       fallbackTitle;
+
+    const jsonLdBrand =
+      typeof jsonProduct.brand === "string"
+        ? jsonProduct.brand
+        : jsonProduct.brand?.name;
+
+    const detectedBrand = inferBrand(
+      [
+        jsonLdBrand,
+        title,
+        fallbackTitle,
+      ]
+        .filter(
+          (value): value is string =>
+            Boolean(value),
+        )
+        .join(" "),
+    );
+
+    /*
+     * Reject products whose actual brand does not match the brand whose
+     * retailer search produced this candidate.
+     */
+    if (
+      !detectedBrand ||
+      detectedBrand.slug !== brandSlug
+    ) {
+      continue;
+    }
 
     const rawImage = Array.isArray(jsonProduct.image)
       ? jsonProduct.image[0]
@@ -323,8 +359,8 @@ export async function parseRetailerProductPage({
       currency: "KRW",
       gender: inferGender(title, gender),
 
-      brandSlug,
-      brandName,
+      brandSlug: detectedBrand.slug,
+      brandName: detectedBrand.name,
 
       productName: title,
       categorySlug: inferCategory(title),

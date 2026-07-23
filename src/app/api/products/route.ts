@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { calculateDiscountPercentage } from "@/lib/utils";
 import { inferCategory } from "@/lib/products/infer-category";
 import { inferGender } from "@/lib/products/infer-gender";
+import { inferBrand } from "@/lib/products/infer-brand";
 import type {
   BrandSlug,
 } from "@/constants/brands";
@@ -369,6 +370,32 @@ function normalizeProduct(
     return null;
   }
 
+  /*
+   * Search results may include sponsored or loosely related products.
+   * Confirm the brand from the actual listing before returning it.
+   */
+  const detectedBrand = inferBrand(
+    [
+      title,
+      result.source,
+      result.tag,
+      result.badge,
+      ...(result.extensions ?? []),
+    ]
+      .filter(
+        (value): value is string =>
+          Boolean(value),
+      )
+      .join(" "),
+  );
+
+  if (
+    !detectedBrand ||
+    detectedBrand.slug !== brand.slug
+  ) {
+    return null;
+  }
+
   return {
     id: createProductId(result),
 
@@ -391,8 +418,11 @@ function normalizeProduct(
      * so do not require the title to contain
      * the brand again.
      */
-    brandSlug: brand.slug,
-    brandName: brand.englishName,
+    /*
+     * Use the brand detected from the listing itself.
+     */
+    brandSlug: detectedBrand.slug,
+    brandName: detectedBrand.name,
 
     productName: title,
     categorySlug:
