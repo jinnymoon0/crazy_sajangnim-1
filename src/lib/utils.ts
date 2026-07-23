@@ -11,6 +11,8 @@ export function calculateDiscountPercentage(
   salePrice: number,
 ): number {
   if (
+    !Number.isFinite(originalPrice) ||
+    !Number.isFinite(salePrice) ||
     originalPrice <= 0 ||
     salePrice < 0 ||
     salePrice >= originalPrice

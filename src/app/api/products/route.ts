@@ -406,6 +406,11 @@ function normalizeProduct(
       prices.salePrice,
     discountPercentage:
       prices.discountPercentage,
+    saleVerification:
+      prices.originalPrice !== null &&
+      prices.discountPercentage !== null
+        ? "VERIFIED"
+        : "UNVERIFIED",
 
     isAvailable: true,
     collectedAt:

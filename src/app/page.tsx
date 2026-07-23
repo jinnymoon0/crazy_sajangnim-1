@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ProductGrid } from "@/components/products/ProductGrid";
-import { DEMO_PRODUCTS } from "@/data/demo-products";
+import { useProducts } from "@/hooks/use-products";
 import type { BrandSlug } from "@/constants/brands";
 import type { CategorySlug } from "@/constants/categories";
 import type {
@@ -13,10 +13,15 @@ import type {
   ProductSort,
 } from "@/types/product";
 
+type SelectableGender = Exclude<Gender, "UNISEX">;
+
 export default function HomePage() {
   const [market, setMarket] = useState<Market>("US");
-  const [gender, setGender] = useState<Gender>("MEN");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [gender, setGender] =
+    useState<SelectableGender>("MEN");
+
+  const [sidebarOpen, setSidebarOpen] =
+    useState(false);
 
   const [selectedBrands, setSelectedBrands] = useState<
     BrandSlug[]
@@ -28,28 +33,33 @@ export default function HomePage() {
   const [sort, setSort] =
     useState<ProductSort>("discount-desc");
 
+  const {
+    data,
+    error,
+    isLoading,
+    isValidating,
+    mutate,
+  } = useProducts(market, gender);
+
   const products = useMemo(() => {
-    const filtered = DEMO_PRODUCTS.filter((product) => {
-      const matchesMarket = product.market === market;
-      const matchesGender = product.gender === gender;
+    const filtered = (data?.products ?? []).filter(
+      (product) => {
+        const matchesBrand =
+          selectedBrands.length === 0 ||
+          selectedBrands.includes(product.brandSlug);
 
-      const matchesBrand =
-        selectedBrands.length === 0 ||
-        selectedBrands.includes(product.brandSlug);
+        const matchesCategory =
+          selectedCategory === "all" ||
+          product.categorySlug === selectedCategory;
 
-      const matchesCategory =
-        selectedCategory === "all" ||
-        product.categorySlug === selectedCategory;
-
-      return (
-        matchesMarket &&
-        matchesGender &&
-        matchesBrand &&
-        matchesCategory &&
-        product.isAvailable &&
-        product.salePrice < product.originalPrice
-      );
-    });
+        return (
+          matchesBrand &&
+          matchesCategory &&
+          product.isAvailable &&
+          product.salePrice > 0
+        );
+      },
+    );
 
     return [...filtered].sort((first, second) => {
       switch (sort) {
@@ -66,16 +76,28 @@ export default function HomePage() {
           );
 
         case "discount-desc":
-        default:
+        default: {
+          const verificationDifference =
+            Number(
+              second.saleVerification === "VERIFIED",
+            ) -
+            Number(
+              first.saleVerification === "VERIFIED",
+            );
+
+          if (verificationDifference !== 0) {
+            return verificationDifference;
+          }
+
           return (
-            second.discountPercentage -
-            first.discountPercentage
+            (second.discountPercentage ?? 0) -
+            (first.discountPercentage ?? 0)
           );
+        }
       }
     });
   }, [
-    market,
-    gender,
+    data,
     selectedBrands,
     selectedCategory,
     sort,
@@ -130,7 +152,10 @@ export default function HomePage() {
               {market === "US"
                 ? "United States"
                 : "Korean"}{" "}
-              {gender === "MEN" ? "Menswear" : "Womenswear"} Sale
+              {gender === "MEN"
+                ? "Menswear"
+                : "Womenswear"}{" "}
+              Sale
             </p>
 
             <h2 className="text-2xl font-medium md:text-3xl">
@@ -138,35 +163,77 @@ export default function HomePage() {
             </h2>
 
             <p className="mt-2 text-sm text-black/50">
-              {products.length} discounted{" "}
-              {products.length === 1 ? "item" : "items"}
+              {isLoading
+                ? "Loading sale listings..."
+                : `${products.length} sale ${
+                    products.length === 1
+                      ? "listing"
+                      : "listings"
+                  }`}
             </p>
           </div>
 
-          <select
-            value={sort}
-            onChange={(event) =>
-              setSort(event.target.value as ProductSort)
-            }
-            aria-label="Sort products"
-            className="h-11 min-w-48 border border-black/15 bg-transparent px-3 text-sm outline-none"
-          >
-            <option value="discount-desc">
-              Highest discount
-            </option>
-            <option value="price-asc">
-              Lowest price
-            </option>
-            <option value="price-desc">
-              Highest price
-            </option>
-            <option value="newest">
-              Recently added
-            </option>
-          </select>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => mutate()}
+              disabled={isValidating}
+              className="h-11 border border-black/15 px-4 text-sm transition hover:bg-black hover:text-white disabled:opacity-40"
+            >
+              {isValidating
+                ? "Refreshing..."
+                : "Refresh products"}
+            </button>
+
+            <select
+              value={sort}
+              onChange={(event) =>
+                setSort(
+                  event.target.value as ProductSort,
+                )
+              }
+              aria-label="Sort products"
+              className="h-11 min-w-48 border border-black/15 bg-transparent px-3 text-sm outline-none"
+            >
+              <option value="discount-desc">
+                Verified sales first
+              </option>
+              <option value="price-asc">
+                Lowest price
+              </option>
+              <option value="price-desc">
+                Highest price
+              </option>
+              <option value="newest">
+                Recently added
+              </option>
+            </select>
+          </div>
         </div>
 
-        <ProductGrid products={products} />
+        {error ? (
+          <div className="border border-red-300 bg-red-50 p-6">
+            <p className="font-medium">
+              Unable to retrieve sale listings
+            </p>
+
+            <p className="mt-2 text-sm text-red-700">
+              {error.message}
+            </p>
+          </div>
+        ) : isLoading ? (
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index}>
+                <div className="aspect-[4/5] animate-pulse bg-black/10" />
+                <div className="mt-4 h-3 w-20 animate-pulse bg-black/10" />
+                <div className="mt-3 h-3 w-3/4 animate-pulse bg-black/10" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <ProductGrid products={products} />
+        )}
       </section>
     </main>
   );

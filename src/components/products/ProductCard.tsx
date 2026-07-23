@@ -11,6 +11,11 @@ interface ProductCardProps {
 export function ProductCard({ product }: ProductCardProps) {
   const [imageFailed, setImageFailed] = useState(false);
 
+  const isVerified =
+    product.saleVerification === "VERIFIED" &&
+    product.originalPrice !== null &&
+    product.discountPercentage !== null;
+
   return (
     <a
       href={product.sourceUrl}
@@ -29,7 +34,7 @@ export function ProductCard({ product }: ProductCardProps) {
               className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.025]"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-[#e7e3da] px-6 text-center">
+            <div className="flex h-full w-full items-center justify-center px-6 text-center">
               <div>
                 <p className="text-xl font-semibold tracking-[0.12em]">
                   {product.brandName}
@@ -43,7 +48,9 @@ export function ProductCard({ product }: ProductCardProps) {
           )}
 
           <span className="absolute left-3 top-3 bg-[#d8432e] px-2.5 py-1 text-xs font-semibold text-white">
-            {product.discountPercentage}% OFF
+            {isVerified
+              ? `${product.discountPercentage}% OFF`
+              : "SALE"}
           </span>
         </div>
 
@@ -67,10 +74,21 @@ export function ProductCard({ product }: ProductCardProps) {
               {formatPrice(product.salePrice, product.currency)}
             </span>
 
-            <span className="text-xs text-black/40 line-through">
-              {formatPrice(product.originalPrice, product.currency)}
-            </span>
+            {product.originalPrice !== null && (
+              <span className="text-xs text-black/40 line-through">
+                {formatPrice(
+                  product.originalPrice,
+                  product.currency,
+                )}
+              </span>
+            )}
           </div>
+
+          {!isVerified && (
+            <p className="mt-2 text-[11px] text-black/45">
+              Original price not provided by retailer
+            </p>
+          )}
         </div>
       </article>
     </a>

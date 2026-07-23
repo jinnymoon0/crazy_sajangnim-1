@@ -3,7 +3,8 @@ import type { CategorySlug } from "@/constants/categories";
 
 export type Market = "US" | "KR";
 export type Currency = "USD" | "KRW";
-export type Gender = "MEN" | "WOMEN";
+export type Gender = "MEN" | "WOMEN" | "UNISEX";
+export type SaleVerification = "VERIFIED" | "UNVERIFIED";
 
 export type ProductSort =
   | "discount-desc"
@@ -13,6 +14,7 @@ export type ProductSort =
 
 export interface Product {
   id: string;
+
   sourceName: string;
   sourceUrl: string;
 
@@ -28,9 +30,10 @@ export interface Product {
 
   imageUrl: string;
 
-  originalPrice: number;
+  originalPrice: number | null;
   salePrice: number;
-  discountPercentage: number;
+  discountPercentage: number | null;
+  saleVerification: SaleVerification;
 
   isAvailable: boolean;
   collectedAt: string;

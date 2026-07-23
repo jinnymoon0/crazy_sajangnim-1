@@ -5,9 +5,9 @@ import type { Gender, Market } from "@/types/product";
 
 interface HeaderProps {
   market: Market;
-  gender: Gender;
+  gender: Exclude<Gender, "UNISEX">;
   onMarketChange: (market: Market) => void;
-  onGenderChange: (gender: Gender) => void;
+  onGenderChange: (gender: Exclude<Gender, "UNISEX">) => void;
   onMenuOpen: () => void;
 }
 
