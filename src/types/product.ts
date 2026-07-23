@@ -3,6 +3,7 @@ import type { CategorySlug } from "@/constants/categories";
 
 export type Market = "US" | "KR";
 export type Currency = "USD" | "KRW";
+export type Gender = "MEN" | "WOMEN";
 
 export type ProductSort =
   | "discount-desc"
@@ -17,6 +18,7 @@ export interface Product {
 
   market: Market;
   currency: Currency;
+  gender: Gender;
 
   brandSlug: BrandSlug;
   brandName: string;

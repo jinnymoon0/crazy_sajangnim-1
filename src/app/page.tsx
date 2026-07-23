@@ -8,24 +8,30 @@ import { DEMO_PRODUCTS } from "@/data/demo-products";
 import type { BrandSlug } from "@/constants/brands";
 import type { CategorySlug } from "@/constants/categories";
 import type {
+  Gender,
   Market,
   ProductSort,
 } from "@/types/product";
 
 export default function HomePage() {
   const [market, setMarket] = useState<Market>("US");
+  const [gender, setGender] = useState<Gender>("MEN");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
   const [selectedBrands, setSelectedBrands] = useState<
     BrandSlug[]
   >([]);
+
   const [selectedCategory, setSelectedCategory] =
     useState<CategorySlug>("all");
+
   const [sort, setSort] =
     useState<ProductSort>("discount-desc");
 
   const products = useMemo(() => {
     const filtered = DEMO_PRODUCTS.filter((product) => {
       const matchesMarket = product.market === market;
+      const matchesGender = product.gender === gender;
 
       const matchesBrand =
         selectedBrands.length === 0 ||
@@ -37,6 +43,7 @@ export default function HomePage() {
 
       return (
         matchesMarket &&
+        matchesGender &&
         matchesBrand &&
         matchesCategory &&
         product.isAvailable &&
@@ -68,6 +75,7 @@ export default function HomePage() {
     });
   }, [
     market,
+    gender,
     selectedBrands,
     selectedCategory,
     sort,
@@ -92,8 +100,13 @@ export default function HomePage() {
     <main className="min-h-screen bg-[#f5f2ea] text-[#111111]">
       <Header
         market={market}
+        gender={gender}
         onMarketChange={(nextMarket) => {
           setMarket(nextMarket);
+          clearFilters();
+        }}
+        onGenderChange={(nextGender) => {
+          setGender(nextGender);
           clearFilters();
         }}
         onMenuOpen={() => setSidebarOpen(true)}
@@ -115,8 +128,9 @@ export default function HomePage() {
           <div>
             <p className="mb-2 text-xs font-medium tracking-[0.2em] text-black/45 uppercase">
               {market === "US"
-                ? "United States Sale"
-                : "Korean Sale"}
+                ? "United States"
+                : "Korean"}{" "}
+              {gender === "MEN" ? "Menswear" : "Womenswear"} Sale
             </p>
 
             <h2 className="text-2xl font-medium md:text-3xl">
@@ -132,9 +146,7 @@ export default function HomePage() {
           <select
             value={sort}
             onChange={(event) =>
-              setSort(
-                event.target.value as ProductSort,
-              )
+              setSort(event.target.value as ProductSort)
             }
             aria-label="Sort products"
             className="h-11 min-w-48 border border-black/15 bg-transparent px-3 text-sm outline-none"
