@@ -12,12 +12,12 @@ export const DEMO_PRODUCTS: Product[] = [
     productName: "Double Cloth Wool Coat",
     categorySlug: "outerwear",
     imageUrl:
-      "https://placehold.co/800x1000/e7e3da/111111?text=AURALEE",
+      "https://images.unsplash.com/photo-1539533018447-63fcce2678e3?auto=format&fit=crop&w=1200&q=85",
     originalPrice: 1200,
     salePrice: 720,
     discountPercentage: 40,
     isAvailable: true,
-    collectedAt: new Date().toISOString(),
+    collectedAt: "2026-07-23T00:00:00.000Z",
   },
   {
     id: "us-needles-1",
@@ -30,12 +30,12 @@ export const DEMO_PRODUCTS: Product[] = [
     productName: "Poly Smooth Track Pants",
     categorySlug: "pants",
     imageUrl:
-      "https://placehold.co/800x1000/e1ded6/111111?text=NEEDLES",
+      "https://images.unsplash.com/photo-1506629082955-511b1aa562c8?auto=format&fit=crop&w=1200&q=85",
     originalPrice: 310,
     salePrice: 217,
     discountPercentage: 30,
     isAvailable: true,
-    collectedAt: new Date().toISOString(),
+    collectedAt: "2026-07-23T00:00:00.000Z",
   },
   {
     id: "us-kapital-1",
@@ -48,12 +48,12 @@ export const DEMO_PRODUCTS: Product[] = [
     productName: "Denim Work Jacket",
     categorySlug: "outerwear",
     imageUrl:
-      "https://placehold.co/800x1000/d9d4ca/111111?text=KAPITAL",
+      "https://images.unsplash.com/photo-1551537482-f2075a1d41f2?auto=format&fit=crop&w=1200&q=85",
     originalPrice: 760,
     salePrice: 532,
     discountPercentage: 30,
     isAvailable: true,
-    collectedAt: new Date().toISOString(),
+    collectedAt: "2026-07-23T00:00:00.000Z",
   },
   {
     id: "kr-lemaire-1",
@@ -66,12 +66,12 @@ export const DEMO_PRODUCTS: Product[] = [
     productName: "Croissant Small Shoulder Bag",
     categorySlug: "bags",
     imageUrl:
-      "https://placehold.co/800x1000/ddd8ce/111111?text=LEMAIRE",
+      "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=1200&q=85",
     originalPrice: 1890000,
     salePrice: 1323000,
     discountPercentage: 30,
     isAvailable: true,
-    collectedAt: new Date().toISOString(),
+    collectedAt: "2026-07-23T00:00:00.000Z",
   },
   {
     id: "kr-danton-1",
@@ -84,12 +84,12 @@ export const DEMO_PRODUCTS: Product[] = [
     productName: "Insulation Stand Collar Jacket",
     categorySlug: "outerwear",
     imageUrl:
-      "https://placehold.co/800x1000/e5e1d8/111111?text=DANTON",
+      "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?auto=format&fit=crop&w=1200&q=85",
     originalPrice: 398000,
     salePrice: 278600,
     discountPercentage: 30,
     isAvailable: true,
-    collectedAt: new Date().toISOString(),
+    collectedAt: "2026-07-23T00:00:00.000Z",
   },
   {
     id: "kr-comoli-1",
@@ -102,11 +102,11 @@ export const DEMO_PRODUCTS: Product[] = [
     productName: "Cotton Drill Pants",
     categorySlug: "pants",
     imageUrl:
-      "https://placehold.co/800x1000/e3dfd5/111111?text=COMOLI",
+      "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?auto=format&fit=crop&w=1200&q=85",
     originalPrice: 690000,
     salePrice: 483000,
     discountPercentage: 30,
     isAvailable: true,
-    collectedAt: new Date().toISOString(),
+    collectedAt: "2026-07-23T00:00:00.000Z",
   },
 ];

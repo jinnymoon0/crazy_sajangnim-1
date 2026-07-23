@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { Product } from "@/types/product";
 import { formatPrice } from "@/lib/utils";
 
@@ -6,6 +9,8 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const [imageFailed, setImageFailed] = useState(false);
+
   return (
     <a
       href={product.sourceUrl}
@@ -15,13 +20,29 @@ export function ProductCard({ product }: ProductCardProps) {
     >
       <article>
         <div className="relative aspect-[4/5] overflow-hidden bg-[#e7e3da]">
-          <img
-            src={product.imageUrl}
-            alt={`${product.brandName} ${product.productName}`}
-            className="size-full object-cover transition duration-500 group-hover:scale-[1.025]"
-          />
+          {!imageFailed ? (
+            <img
+              src={product.imageUrl}
+              alt={`${product.brandName} ${product.productName}`}
+              loading="lazy"
+              onError={() => setImageFailed(true)}
+              className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.025]"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-[#e7e3da] px-6 text-center">
+              <div>
+                <p className="text-xl font-semibold tracking-[0.12em]">
+                  {product.brandName}
+                </p>
 
-          <span className="absolute top-3 left-3 bg-[#d8432e] px-2.5 py-1 text-xs font-semibold text-white">
+                <p className="mt-3 text-xs text-black/45">
+                  Image unavailable
+                </p>
+              </div>
+            </div>
+          )}
+
+          <span className="absolute left-3 top-3 bg-[#d8432e] px-2.5 py-1 text-xs font-semibold text-white">
             {product.discountPercentage}% OFF
           </span>
         </div>
@@ -43,17 +64,11 @@ export function ProductCard({ product }: ProductCardProps) {
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold text-[#c83d29]">
-              {formatPrice(
-                product.salePrice,
-                product.currency,
-              )}
+              {formatPrice(product.salePrice, product.currency)}
             </span>
 
             <span className="text-xs text-black/40 line-through">
-              {formatPrice(
-                product.originalPrice,
-                product.currency,
-              )}
+              {formatPrice(product.originalPrice, product.currency)}
             </span>
           </div>
         </div>
