@@ -6,6 +6,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const MAX_IMAGE_COUNT = 5;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -25,34 +26,34 @@ const blogPostSchema = z.object({
   content: z
     .string()
     .trim()
-    .min(1, "Please enter some content.")
-    .max(5000, "The content must be 5,000 characters or fewer."),
+    .min(1, "Please enter a description.")
+    .max(5000, "The description must be 5,000 characters or fewer."),
 
   authorName: z
     .string()
     .trim()
-    .max(40, "The name must be 40 characters or fewer.")
+    .max(40, "The display name must be 40 characters or fewer.")
     .optional(),
 });
 
-function sanitizeFileExtension(file: File): string {
-  const extensionFromName = file.name.split(".").pop()?.toLowerCase();
+function getFileExtension(file: File): string {
+  const extension = file.name.split(".").pop()?.toLowerCase();
 
   if (
-    extensionFromName &&
-    ["jpg", "jpeg", "png", "webp", "gif"].includes(extensionFromName)
+    extension &&
+    ["jpg", "jpeg", "png", "webp", "gif"].includes(extension)
   ) {
-    return extensionFromName === "jpeg" ? "jpg" : extensionFromName;
+    return extension === "jpeg" ? "jpg" : extension;
   }
 
-  const extensionsByMimeType: Record<string, string> = {
+  const extensionByMimeType: Record<string, string> = {
     "image/jpeg": "jpg",
     "image/png": "png",
     "image/webp": "webp",
     "image/gif": "gif",
   };
 
-  return extensionsByMimeType[file.type] ?? "jpg";
+  return extensionByMimeType[file.type] ?? "jpg";
 }
 
 function isSameOriginRequest(request: Request): boolean {
@@ -62,10 +63,8 @@ function isSameOriginRequest(request: Request): boolean {
     return true;
   }
 
-  const requestUrl = new URL(request.url);
-
   try {
-    return new URL(origin).host === requestUrl.host;
+    return new URL(origin).host === new URL(request.url).host;
   } catch {
     return false;
   }
@@ -78,13 +77,28 @@ export async function GET() {
     const { data, error } = await supabase
       .from("blog_posts")
       .select(
-        "id, title, content, author_name, image_url, image_path, created_at",
+        [
+          "id",
+          "title",
+          "content",
+          "author_name",
+          "image_url",
+          "image_path",
+          "image_urls",
+          "image_paths",
+          "created_at",
+        ].join(","),
       )
       .order("created_at", { ascending: false })
       .limit(100);
 
     if (error) {
-      console.error("Blog post fetch failed:", error);
+      console.error("Blog post fetch failed:", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
 
       return NextResponse.json(
         { error: "Failed to load blog posts." },
@@ -92,8 +106,24 @@ export async function GET() {
       );
     }
 
+    const posts = (data ?? []).map((post) => ({
+      ...post,
+      image_urls:
+        post.image_urls?.length > 0
+          ? post.image_urls
+          : post.image_url
+            ? [post.image_url]
+            : [],
+      image_paths:
+        post.image_paths?.length > 0
+          ? post.image_paths
+          : post.image_path
+            ? [post.image_path]
+            : [],
+    }));
+
     return NextResponse.json(
-      { posts: data ?? [] },
+      { posts },
       {
         headers: {
           "Cache-Control": "no-store",
@@ -111,7 +141,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  let uploadedImagePath: string | null = null;
+  const uploadedImagePaths: string[] = [];
 
   try {
     if (!isSameOriginRequest(request)) {
@@ -123,7 +153,6 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
 
-    // Basic honeypot. Normal users never see or fill this field.
     const website = String(formData.get("website") ?? "").trim();
 
     if (website) {
@@ -150,60 +179,107 @@ export async function POST(request: Request) {
       );
     }
 
-    const image = formData.get("image");
+    const images = formData
+      .getAll("images")
+      .filter(
+        (value): value is File =>
+          value instanceof File && value.size > 0,
+      );
 
-    if (!(image instanceof File) || image.size === 0) {
+    if (images.length === 0) {
       return NextResponse.json(
-        { error: "Please select a clothing image." },
+        { error: "Please select at least one clothing image." },
         { status: 400 },
       );
     }
 
-    if (!ALLOWED_IMAGE_TYPES.has(image.type)) {
+    if (images.length > MAX_IMAGE_COUNT) {
       return NextResponse.json(
         {
-          error: "Only JPG, PNG, WebP, and GIF images are supported.",
+          error: `You can upload up to ${MAX_IMAGE_COUNT} images per post.`,
         },
         { status: 400 },
       );
     }
 
-    if (image.size > MAX_IMAGE_SIZE) {
-      return NextResponse.json(
-        { error: "The image must be 5 MB or smaller." },
-        { status: 400 },
-      );
+    for (const image of images) {
+      if (!ALLOWED_IMAGE_TYPES.has(image.type)) {
+        return NextResponse.json(
+          {
+            error:
+              "Only JPG, PNG, WebP, and GIF images are supported.",
+          },
+          { status: 400 },
+        );
+      }
+
+      if (image.size > MAX_IMAGE_SIZE) {
+        return NextResponse.json(
+          {
+            error: `${image.name} must be 5 MB or smaller.`,
+          },
+          { status: 400 },
+        );
+      }
     }
 
     const supabase = getSupabaseAdmin();
-    const extension = sanitizeFileExtension(image);
+    const postFolder = crypto.randomUUID();
+    const imageUrls: string[] = [];
 
-    uploadedImagePath = `${new Date().getUTCFullYear()}/${crypto.randomUUID()}.${extension}`;
+    for (const [index, image] of images.entries()) {
+      const extension = getFileExtension(image);
 
-    const imageBuffer = Buffer.from(await image.arrayBuffer());
+      const imagePath = [
+        new Date().getUTCFullYear(),
+        postFolder,
+        `${index + 1}-${crypto.randomUUID()}.${extension}`,
+      ].join("/");
 
-    const { error: uploadError } = await supabase.storage
-      .from("blog-images")
-      .upload(uploadedImagePath, imageBuffer, {
-        contentType: image.type,
-        cacheControl: "31536000",
-        upsert: false,
-      });
+      const imageBuffer = Buffer.from(await image.arrayBuffer());
 
-    if (uploadError) {
-      console.error("Blog image upload failed:", uploadError);
+      const { error: uploadError } = await supabase.storage
+        .from("blog-images")
+        .upload(imagePath, imageBuffer, {
+          contentType: image.type,
+          cacheControl: "31536000",
+          upsert: false,
+        });
 
-      return NextResponse.json(
-        { error: "Failed to upload the image." },
-        { status: 500 },
-      );
+      if (uploadError) {
+        console.error("Blog image upload failed:", {
+          name: uploadError.name,
+          message: uploadError.message,
+          imagePath,
+        });
+
+        if (uploadedImagePaths.length > 0) {
+          await supabase.storage
+            .from("blog-images")
+            .remove(uploadedImagePaths);
+        }
+
+        return NextResponse.json(
+          {
+            error:
+              process.env.NODE_ENV === "development"
+                ? `Failed to upload image ${index + 1}: ${uploadError.message}`
+                : "Failed to upload one or more images.",
+          },
+          { status: 500 },
+        );
+      }
+
+      uploadedImagePaths.push(imagePath);
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage
+        .from("blog-images")
+        .getPublicUrl(imagePath);
+
+      imageUrls.push(publicUrl);
     }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage
-      .from("blog-images")
-      .getPublicUrl(uploadedImagePath);
 
     const authorName =
       parsedFields.data.authorName?.trim() || "Anonymous";
@@ -214,23 +290,48 @@ export async function POST(request: Request) {
         title: parsedFields.data.title,
         content: parsedFields.data.content,
         author_name: authorName,
-        image_url: publicUrl,
-        image_path: uploadedImagePath,
+
+        image_urls: imageUrls,
+        image_paths: uploadedImagePaths,
+
+        // Preserve compatibility with the original schema.
+        image_url: imageUrls[0],
+        image_path: uploadedImagePaths[0],
       })
       .select(
-        "id, title, content, author_name, image_url, image_path, created_at",
+        [
+          "id",
+          "title",
+          "content",
+          "author_name",
+          "image_url",
+          "image_path",
+          "image_urls",
+          "image_paths",
+          "created_at",
+        ].join(","),
       )
       .single();
 
     if (insertError) {
-      console.error("Blog post insert failed:", insertError);
+      console.error("Blog post insert failed:", {
+        code: insertError.code,
+        message: insertError.message,
+        details: insertError.details,
+        hint: insertError.hint,
+      });
 
       await supabase.storage
         .from("blog-images")
-        .remove([uploadedImagePath]);
+        .remove(uploadedImagePaths);
 
       return NextResponse.json(
-        { error: "Failed to save the blog post." },
+        {
+          error:
+            process.env.NODE_ENV === "development"
+              ? `Failed to save blog post: ${insertError.code} - ${insertError.message}`
+              : "Failed to save the blog post.",
+        },
         { status: 500 },
       );
     }
@@ -239,12 +340,12 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Blog POST error:", error);
 
-    if (uploadedImagePath) {
+    if (uploadedImagePaths.length > 0) {
       try {
         await getSupabaseAdmin()
           .storage
           .from("blog-images")
-          .remove([uploadedImagePath]);
+          .remove(uploadedImagePaths);
       } catch (cleanupError) {
         console.error("Uploaded image cleanup failed:", cleanupError);
       }

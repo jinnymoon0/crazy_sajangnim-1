@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import type { BlogPost } from "@/types/blog";
 
 type BlogFeedProps = {
@@ -9,9 +11,95 @@ function formatPostDate(dateValue: string): string {
     year: "numeric",
     month: "short",
     day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
   }).format(new Date(dateValue));
+}
+
+function PostImages({
+  title,
+  imageUrls,
+}: {
+  title: string;
+  imageUrls: string[];
+}) {
+  if (imageUrls.length === 0) {
+    return (
+      <div className="flex aspect-[4/3] items-center justify-center bg-neutral-100 text-sm text-neutral-500">
+        Image unavailable
+      </div>
+    );
+  }
+
+  if (imageUrls.length === 1) {
+    return (
+      <div className="aspect-[4/3] overflow-hidden bg-neutral-100">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrls[0]}
+          alt={title}
+          loading="lazy"
+          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+        />
+      </div>
+    );
+  }
+
+  if (imageUrls.length === 2) {
+    return (
+      <div className="grid aspect-[4/3] grid-cols-2 gap-1 bg-neutral-100">
+        {imageUrls.map((url, index) => (
+          <div
+            key={`${url}-${index}`}
+            className="overflow-hidden"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={`${title} image ${index + 1}`}
+              loading="lazy"
+              className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  const visibleImages = imageUrls.slice(0, 3);
+
+  return (
+    <div className="grid aspect-[4/3] grid-cols-2 grid-rows-2 gap-1 bg-neutral-100">
+      <div className="row-span-2 overflow-hidden">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={visibleImages[0]}
+          alt={`${title} cover image`}
+          loading="lazy"
+          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+        />
+      </div>
+
+      {visibleImages.slice(1).map((url, index) => (
+        <div
+          key={`${url}-${index}`}
+          className="relative overflow-hidden"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt={`${title} image ${index + 2}`}
+            loading="lazy"
+            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+          />
+
+          {index === 1 && imageUrls.length > 3 ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-lg font-bold text-white">
+              +{imageUrls.length - 3}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function BlogFeed({ posts }: BlogFeedProps) {
@@ -48,42 +136,60 @@ export default function BlogFeed({ posts }: BlogFeedProps) {
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-        {posts.map((post) => (
-          <article
-            key={post.id}
-            className="overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm"
-          >
-            <div className="aspect-[4/5] overflow-hidden bg-neutral-100">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={post.image_url}
-                alt={post.title}
-                loading="lazy"
-                className="h-full w-full object-cover transition duration-300 hover:scale-[1.02]"
-              />
-            </div>
+        {posts.map((post) => {
+          const imageUrls =
+            post.image_urls?.length > 0
+              ? post.image_urls
+              : post.image_url
+                ? [post.image_url]
+                : [];
 
-            <div className="p-5">
-              <div className="flex items-center justify-between gap-3 text-xs text-neutral-500">
-                <span className="truncate font-semibold">
-                  {post.author_name}
-                </span>
+          return (
+            <Link
+              key={post.id}
+              href={`/blog/${post.id}`}
+              className="group block overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
+            >
+              <article>
+                <PostImages
+                  title={post.title}
+                  imageUrls={imageUrls}
+                />
 
-                <time dateTime={post.created_at}>
-                  {formatPostDate(post.created_at)}
-                </time>
-              </div>
+                <div className="p-5">
+                  <div className="flex items-center justify-between gap-3 text-xs text-neutral-500">
+                    <span className="truncate font-semibold">
+                      {post.author_name}
+                    </span>
 
-              <h3 className="mt-3 text-lg font-bold leading-6 text-neutral-950">
-                {post.title}
-              </h3>
+                    <time dateTime={post.created_at}>
+                      {formatPostDate(post.created_at)}
+                    </time>
+                  </div>
 
-              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-600">
-                {post.content}
-              </p>
-            </div>
-          </article>
-        ))}
+                  <h3 className="mt-3 text-lg font-bold leading-6 text-neutral-950">
+                    {post.title}
+                  </h3>
+
+                  <p className="mt-3 line-clamp-3 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-600">
+                    {post.content}
+                  </p>
+
+                  <div className="mt-4 flex items-center justify-between text-xs font-semibold text-neutral-500">
+                    <span>
+                      {imageUrls.length}{" "}
+                      {imageUrls.length === 1 ? "photo" : "photos"}
+                    </span>
+
+                    <span className="text-neutral-950">
+                      View post →
+                    </span>
+                  </div>
+                </div>
+              </article>
+            </Link>
+          );
+        })}
       </div>
     </section>
   );

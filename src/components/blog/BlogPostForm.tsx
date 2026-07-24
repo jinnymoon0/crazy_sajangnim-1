@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
+const MAX_IMAGE_COUNT = 5;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 type SubmissionStatus =
@@ -18,48 +19,135 @@ type SubmissionStatus =
 export default function BlogPostForm() {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [status, setStatus] = useState<SubmissionStatus>({
     type: "idle",
     message: "",
   });
 
-  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  function clearPreviewUrls() {
+    previewUrls.forEach((url) => URL.revokeObjectURL(url));
+  }
 
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
+  function setFiles(files: File[]) {
+    clearPreviewUrls();
 
-    if (!file) {
-      setPreviewUrl(null);
+    setSelectedFiles(files);
+    setPreviewUrls(files.map((file) => URL.createObjectURL(file)));
+  }
+
+  function rebuildFileInput(files: File[]) {
+    if (!fileInputRef.current) {
       return;
     }
 
-    if (file.size > MAX_IMAGE_SIZE) {
+    const dataTransfer = new DataTransfer();
+
+    files.forEach((file) => {
+      dataTransfer.items.add(file);
+    });
+
+    fileInputRef.current.files = dataTransfer.files;
+  }
+
+  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+
+    if (files.length === 0) {
+      setFiles([]);
+      return;
+    }
+
+    if (files.length > MAX_IMAGE_COUNT) {
       event.target.value = "";
-      setPreviewUrl(null);
+      setFiles([]);
+
       setStatus({
         type: "error",
-        message: "The image must be 5 MB or smaller.",
+        message: `You can upload up to ${MAX_IMAGE_COUNT} images.`,
       });
+
+      return;
+    }
+
+    const unsupportedFile = files.find(
+      (file) =>
+        ![
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "image/gif",
+        ].includes(file.type),
+    );
+
+    if (unsupportedFile) {
+      event.target.value = "";
+      setFiles([]);
+
+      setStatus({
+        type: "error",
+        message: `${unsupportedFile.name} is not a supported image type.`,
+      });
+
+      return;
+    }
+
+    const oversizedFile = files.find(
+      (file) => file.size > MAX_IMAGE_SIZE,
+    );
+
+    if (oversizedFile) {
+      event.target.value = "";
+      setFiles([]);
+
+      setStatus({
+        type: "error",
+        message: `${oversizedFile.name} is larger than 5 MB.`,
+      });
+
       return;
     }
 
     setStatus({ type: "idle", message: "" });
-    setPreviewUrl(URL.createObjectURL(file));
+    setFiles(files);
+  }
+
+  function removeImage(indexToRemove: number) {
+    const nextFiles = selectedFiles.filter(
+      (_, index) => index !== indexToRemove,
+    );
+
+    setFiles(nextFiles);
+    rebuildFileInput(nextFiles);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (selectedFiles.length === 0) {
+      setStatus({
+        type: "error",
+        message: "Please select at least one clothing image.",
+      });
+
+      return;
+    }
 
     setIsSubmitting(true);
     setStatus({ type: "idle", message: "" });
 
     try {
       const formData = new FormData(event.currentTarget);
+
+      formData.delete("images");
+
+      selectedFiles.forEach((file) => {
+        formData.append("images", file);
+      });
 
       const response = await fetch("/api/blog", {
         method: "POST",
@@ -71,16 +159,16 @@ export default function BlogPostForm() {
       };
 
       if (!response.ok) {
-        throw new Error(result.error ?? "Failed to publish the post.");
+        throw new Error(
+          result.error ?? "Failed to publish the post.",
+        );
       }
 
       formRef.current?.reset();
+      clearPreviewUrls();
+      setSelectedFiles([]);
+      setPreviewUrls([]);
 
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
-
-      setPreviewUrl(null);
       setStatus({
         type: "success",
         message: "Your clothing post has been published.",
@@ -112,8 +200,7 @@ export default function BlogPostForm() {
         </h2>
 
         <p className="mt-2 text-sm leading-6 text-neutral-600">
-          No account is required. Upload a clothing photo and tell the
-          community about it.
+          Upload up to five clothing photos. No account is required.
         </p>
       </div>
 
@@ -127,6 +214,7 @@ export default function BlogPostForm() {
           className="absolute -left-[9999px] h-0 w-0 overflow-hidden"
         >
           <label htmlFor="website">Website</label>
+
           <input
             id="website"
             name="website"
@@ -194,35 +282,60 @@ export default function BlogPostForm() {
 
         <div>
           <label
-            htmlFor="image"
+            htmlFor="images"
             className="mb-2 block text-sm font-semibold text-neutral-800"
           >
-            Clothing image
+            Clothing images
           </label>
 
           <input
-            id="image"
-            name="image"
+            ref={fileInputRef}
+            id="images"
+            name="images"
             type="file"
             required
+            multiple
             accept="image/jpeg,image/png,image/webp,image/gif"
             onChange={handleImageChange}
             className="block w-full rounded-xl border border-dashed border-neutral-300 p-4 text-sm file:mr-4 file:rounded-full file:border-0 file:bg-neutral-950 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
           />
 
           <p className="mt-2 text-xs text-neutral-500">
-            JPG, PNG, WebP, or GIF. Maximum size: 5 MB.
+            Select 1–5 JPG, PNG, WebP, or GIF files. Maximum 5 MB
+            per image.
           </p>
         </div>
 
-        {previewUrl ? (
-          <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-100">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={previewUrl}
-              alt="Selected clothing preview"
-              className="max-h-[480px] w-full object-contain"
-            />
+        {previewUrls.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3">
+            {previewUrls.map((previewUrl, index) => (
+              <div
+                key={`${selectedFiles[index]?.name}-${index}`}
+                className="relative overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-100"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previewUrl}
+                  alt={`Selected clothing preview ${index + 1}`}
+                  className="aspect-square w-full object-cover"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => removeImage(index)}
+                  aria-label={`Remove image ${index + 1}`}
+                  className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/75 text-lg font-bold text-white transition hover:bg-black"
+                >
+                  ×
+                </button>
+
+                {index === 0 ? (
+                  <span className="absolute bottom-2 left-2 rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-neutral-900">
+                    Cover
+                  </span>
+                ) : null}
+              </div>
+            ))}
           </div>
         ) : null}
 

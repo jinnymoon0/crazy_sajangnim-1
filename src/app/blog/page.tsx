@@ -12,7 +12,7 @@ async function getBlogPosts(): Promise<BlogPost[]> {
     const { data, error } = await supabase
       .from("blog_posts")
       .select(
-        "id, title, content, author_name, image_url, image_path, created_at",
+        "id, title, content, author_name, image_url, image_path, image_urls, image_paths, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(100);
