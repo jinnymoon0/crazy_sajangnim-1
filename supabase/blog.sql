@@ -49,7 +49,9 @@ values (
     'image/jpeg',
     'image/png',
     'image/webp',
-    'image/gif'
+    'image/gif',
+    'image/heic',
+    'image/heif'
   ]
 )
 on conflict (id) do update set

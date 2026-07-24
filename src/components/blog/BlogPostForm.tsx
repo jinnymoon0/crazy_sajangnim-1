@@ -81,6 +81,8 @@ export default function BlogPostForm() {
           "image/png",
           "image/webp",
           "image/gif",
+          "image/heic",
+          "image/heif",
         ].includes(file.type),
     );
 
@@ -122,7 +124,6 @@ export default function BlogPostForm() {
     );
 
     setFiles(nextFiles);
-    rebuildFileInput(nextFiles);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -181,7 +182,9 @@ export default function BlogPostForm() {
         message:
           error instanceof Error
             ? error.message
-            : "Failed to publish the post.",
+            : typeof error === "string"
+              ? error
+              : "Failed to publish the post.",
       });
     } finally {
       setIsSubmitting(false);
@@ -296,7 +299,7 @@ export default function BlogPostForm() {
             type="file"
             required
             multiple
-            accept="image/jpeg,image/png,image/webp,image/gif"
+            accept="image/*,.heic,.heif"
             onChange={handleImageChange}
             className="block w-full rounded-xl border border-dashed border-neutral-300 p-4 text-sm file:mr-4 file:rounded-full file:border-0 file:bg-neutral-950 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
           />
