@@ -11,6 +11,36 @@ import { useRouter } from "next/navigation";
 const MAX_IMAGE_COUNT = 5;
 const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
 
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/heif-sequence",
+]);
+
+const ALLOWED_IMAGE_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "gif",
+  "heic",
+  "heif",
+]);
+
+function isSupportedImage(file: File): boolean {
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+
+  return (
+    ALLOWED_IMAGE_TYPES.has(file.type.toLowerCase()) ||
+    ALLOWED_IMAGE_EXTENSIONS.has(extension)
+  );
+}
+
 type SubmissionStatus =
   | { type: "idle"; message: "" }
   | { type: "error"; message: string }
@@ -75,15 +105,7 @@ export default function BlogPostForm() {
     }
 
     const unsupportedFile = files.find(
-      (file) =>
-        ![
-          "image/jpeg",
-          "image/png",
-          "image/webp",
-          "image/gif",
-          "image/heic",
-          "image/heif",
-        ].includes(file.type),
+      (file) => !isSupportedImage(file),
     );
 
     if (unsupportedFile) {
@@ -305,8 +327,8 @@ export default function BlogPostForm() {
           />
 
           <p className="mt-2 text-xs text-neutral-500">
-            Select 1–5 JPG, PNG, WebP, or GIF files. Maximum 20 MB
-            per image.
+            Select 1–5 JPG, PNG, WebP, GIF, HEIC, or HEIF files.
+            Maximum 20 MB per image.
           </p>
         </div>
 
