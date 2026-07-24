@@ -7,13 +7,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_IMAGE_COUNT = 5;
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
 
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
   "image/gif",
+  "image/heic",
+  "image/heif",
 ]);
 
 type BlogPostRow = {
@@ -54,7 +56,7 @@ function getFileExtension(file: File): string {
 
   if (
     extension &&
-    ["jpg", "jpeg", "png", "webp", "gif"].includes(extension)
+    ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"].includes(extension)
   ) {
     return extension === "jpeg" ? "jpg" : extension;
   }
@@ -64,6 +66,8 @@ function getFileExtension(file: File): string {
     "image/png": "png",
     "image/webp": "webp",
     "image/gif": "gif",
+    "image/heic": "heic",
+    "image/heif": "heif",
   };
 
   return extensionByMimeType[file.type] ?? "jpg";
@@ -212,7 +216,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error:
-              "Only JPG, PNG, WebP, and GIF images are supported.",
+              "Only JPG, PNG, WebP, GIF, HEIC, and HEIF images are supported.",
           },
           { status: 400 },
         );
@@ -221,7 +225,7 @@ export async function POST(request: Request) {
       if (image.size > MAX_IMAGE_SIZE) {
         return NextResponse.json(
           {
-            error: `${image.name} must be 5 MB or smaller.`,
+            error: `${image.name} must be 20 MB or smaller.`,
           },
           { status: 400 },
         );

@@ -44,12 +44,14 @@ values (
   'blog-images',
   'blog-images',
   true,
-  5242880,
+  20971520,
   array[
     'image/jpeg',
     'image/png',
     'image/webp',
-    'image/gif'
+    'image/gif',
+    'image/heic',
+    'image/heif'
   ]
 )
 on conflict (id) do update set
