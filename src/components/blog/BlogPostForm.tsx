@@ -9,7 +9,7 @@ import {
 import { useRouter } from "next/navigation";
 
 const MAX_IMAGE_COUNT = 5;
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
 
 type SubmissionStatus =
   | { type: "idle"; message: "" }
@@ -106,7 +106,7 @@ export default function BlogPostForm() {
 
       setStatus({
         type: "error",
-        message: `${oversizedFile.name} is larger than 5 MB.`,
+        message: `${oversizedFile.name} is larger than 20 MB.`,
       });
 
       return;
@@ -302,7 +302,7 @@ export default function BlogPostForm() {
           />
 
           <p className="mt-2 text-xs text-neutral-500">
-            Select 1–5 JPG, PNG, WebP, or GIF files. Maximum 5 MB
+            Select 1–5 JPG, PNG, WebP, or GIF files. Maximum 20 MB
             per image.
           </p>
         </div>

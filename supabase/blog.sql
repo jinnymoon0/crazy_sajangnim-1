@@ -44,7 +44,7 @@ values (
   'blog-images',
   'blog-images',
   true,
-  5242880,
+  20971520,
   array[
     'image/jpeg',
     'image/png',

@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_IMAGE_COUNT = 5;
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
 
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
@@ -221,7 +221,7 @@ export async function POST(request: Request) {
       if (image.size > MAX_IMAGE_SIZE) {
         return NextResponse.json(
           {
-            error: `${image.name} must be 5 MB or smaller.`,
+            error: `${image.name} must be 20 MB or smaller.`,
           },
           { status: 400 },
         );
