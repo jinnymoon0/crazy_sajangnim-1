@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
+
 import { useMemo, useState } from "react";
-import Header from "@/components/layout/Header";
+import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ProductGrid } from "@/components/products/ProductGrid";
 import { useProducts } from "@/hooks/use-products";
@@ -120,6 +122,12 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-[#f5f2ea] text-[#111111]">
+      <Link
+        href="/blog"
+        className="fixed bottom-6 right-6 z-50 inline-flex min-h-12 items-center justify-center rounded-full bg-black px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-neutral-700"
+      >
+        Clothing Blog
+      </Link>
       <Header
         market={market}
         gender={gender}

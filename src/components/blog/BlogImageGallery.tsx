@@ -2,7 +2,6 @@
 
 import {
   type TouchEvent,
-  useEffect,
   useRef,
   useState,
 } from "react";
@@ -20,10 +19,6 @@ export default function BlogImageGallery({
   const touchStartXRef = useRef<number | null>(null);
 
   const [activeIndex, setActiveIndex] = useState(0);
-
-  useEffect(() => {
-    setActiveIndex(0);
-  }, [imageUrls]);
 
   function goToImage(index: number) {
     const safeIndex = Math.max(

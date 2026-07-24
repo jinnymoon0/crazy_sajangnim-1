@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import BlogImageGallery from "@/components/blog/BlogImageGallery";
+import BlogPostManagement from "@/components/blog/BlogPostManagement";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { BlogPost } from "@/types/blog";
 
@@ -12,6 +13,19 @@ type BlogPostPageProps = {
     id: string;
   }>;
 };
+
+type BlogPostRow = {
+  id: string;
+  title: string;
+  content: string;
+  author_name: string;
+  image_url: string | null;
+  image_path: string | null;
+  image_urls: string[] | null;
+  image_paths: string[] | null;
+  created_at: string;
+};
+
 
 function formatPostDate(dateValue: string): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -29,17 +43,7 @@ async function getBlogPost(id: string): Promise<BlogPost | null> {
   const { data, error } = await supabase
     .from("blog_posts")
     .select(
-      [
-        "id",
-        "title",
-        "content",
-        "author_name",
-        "image_url",
-        "image_path",
-        "image_urls",
-        "image_paths",
-        "created_at",
-      ].join(","),
+      "id, title, content, author_name, image_url, image_path, image_urls, image_paths, created_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -59,21 +63,25 @@ async function getBlogPost(id: string): Promise<BlogPost | null> {
     return null;
   }
 
+  const row = data as BlogPostRow;
+
   return {
-    ...data,
+    ...row,
+    image_url: row.image_url ?? "",
+    image_path: row.image_path ?? "",
     image_urls:
-      data.image_urls?.length > 0
-        ? data.image_urls
-        : data.image_url
-          ? [data.image_url]
+      row.image_urls && row.image_urls.length > 0
+        ? row.image_urls
+        : row.image_url
+          ? [row.image_url]
           : [],
     image_paths:
-      data.image_paths?.length > 0
-        ? data.image_paths
-        : data.image_path
-          ? [data.image_path]
+      row.image_paths && row.image_paths.length > 0
+        ? row.image_paths
+        : row.image_path
+          ? [row.image_path]
           : [],
-  } as BlogPost;
+  } satisfies BlogPost;
 }
 
 export default async function BlogPostPage({
@@ -137,6 +145,12 @@ export default async function BlogPostPage({
                 {post.image_urls.length}{" "}
                 {post.image_urls.length === 1 ? "photo" : "photos"}
               </div>
+
+              <BlogPostManagement
+                postId={post.id}
+                initialTitle={post.title}
+                initialContent={post.content}
+              />
             </div>
           </div>
         </article>

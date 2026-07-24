@@ -16,6 +16,18 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/gif",
 ]);
 
+type BlogPostRow = {
+  id: string;
+  title: string;
+  content: string;
+  author_name: string;
+  image_url: string | null;
+  image_path: string | null;
+  image_urls: string[] | null;
+  image_paths: string[] | null;
+  created_at: string;
+};
+
 const blogPostSchema = z.object({
   title: z
     .string()
@@ -34,6 +46,7 @@ const blogPostSchema = z.object({
     .trim()
     .max(40, "The display name must be 40 characters or fewer.")
     .optional(),
+
 });
 
 function getFileExtension(file: File): string {
@@ -77,17 +90,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("blog_posts")
       .select(
-        [
-          "id",
-          "title",
-          "content",
-          "author_name",
-          "image_url",
-          "image_path",
-          "image_urls",
-          "image_paths",
-          "created_at",
-        ].join(","),
+        "id, title, content, author_name, image_url, image_path, image_urls, image_paths, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(100);
@@ -106,16 +109,18 @@ export async function GET() {
       );
     }
 
-    const posts = (data ?? []).map((post) => ({
+    const rows = (data ?? []) as BlogPostRow[];
+
+    const posts = rows.map((post) => ({
       ...post,
       image_urls:
-        post.image_urls?.length > 0
+        post.image_urls && post.image_urls.length > 0
           ? post.image_urls
           : post.image_url
             ? [post.image_url]
             : [],
       image_paths:
-        post.image_paths?.length > 0
+        post.image_paths && post.image_paths.length > 0
           ? post.image_paths
           : post.image_path
             ? [post.image_path]
@@ -291,6 +296,7 @@ export async function POST(request: Request) {
         content: parsedFields.data.content,
         author_name: authorName,
 
+
         image_urls: imageUrls,
         image_paths: uploadedImagePaths,
 
@@ -299,17 +305,7 @@ export async function POST(request: Request) {
         image_path: uploadedImagePaths[0],
       })
       .select(
-        [
-          "id",
-          "title",
-          "content",
-          "author_name",
-          "image_url",
-          "image_path",
-          "image_urls",
-          "image_paths",
-          "created_at",
-        ].join(","),
+        "id, title, content, author_name, image_url, image_path, image_urls, image_paths, created_at",
       )
       .single();
 
