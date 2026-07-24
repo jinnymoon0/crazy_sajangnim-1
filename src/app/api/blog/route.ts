@@ -16,7 +16,52 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/gif",
   "image/heic",
   "image/heif",
+  "image/heic-sequence",
+  "image/heif-sequence",
 ]);
+
+const ALLOWED_IMAGE_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "gif",
+  "heic",
+  "heif",
+]);
+
+function getFileExtensionFromName(file: File): string {
+  return file.name.split(".").pop()?.toLowerCase() ?? "";
+}
+
+function isSupportedImage(file: File): boolean {
+  return (
+    ALLOWED_IMAGE_TYPES.has(file.type.toLowerCase()) ||
+    ALLOWED_IMAGE_EXTENSIONS.has(getFileExtensionFromName(file))
+  );
+}
+
+function getStorageContentType(file: File): string {
+  const type = file.type.toLowerCase();
+
+  if (ALLOWED_IMAGE_TYPES.has(type)) {
+    return type;
+  }
+
+  const extension = getFileExtensionFromName(file);
+
+  const contentTypeByExtension: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+    gif: "image/gif",
+    heic: "image/heic",
+    heif: "image/heif",
+  };
+
+  return contentTypeByExtension[extension] ?? "application/octet-stream";
+}
 
 type BlogPostRow = {
   id: string;
@@ -212,7 +257,7 @@ export async function POST(request: Request) {
     }
 
     for (const image of images) {
-      if (!ALLOWED_IMAGE_TYPES.has(image.type)) {
+      if (!isSupportedImage(image)) {
         return NextResponse.json(
           {
             error:
@@ -250,7 +295,7 @@ export async function POST(request: Request) {
       const { error: uploadError } = await supabase.storage
         .from("blog-images")
         .upload(imagePath, imageBuffer, {
-          contentType: image.type,
+          contentType: getStorageContentType(image),
           cacheControl: "31536000",
           upsert: false,
         });

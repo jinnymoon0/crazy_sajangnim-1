@@ -51,7 +51,9 @@ values (
     'image/webp',
     'image/gif',
     'image/heic',
-    'image/heif'
+    'image/heif',
+    'image/heic-sequence',
+    'image/heif-sequence'
   ]
 )
 on conflict (id) do update set
