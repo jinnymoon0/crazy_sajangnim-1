@@ -8,8 +8,14 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
+import { compressImageForUpload } from "@/lib/images/compress-image";
+
 const MAX_IMAGE_COUNT = 5;
 const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
+
+// Vercel serverless functions reject request bodies larger than ~4.5 MB, so the
+// combined size of the compressed images we upload must stay under that ceiling.
+const MAX_UPLOAD_TOTAL_BYTES = 4.3 * 1024 * 1024;
 
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
@@ -54,6 +60,7 @@ export default function BlogPostForm() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
   const [status, setStatus] = useState<SubmissionStatus>({
     type: "idle",
     message: "",
@@ -151,6 +158,8 @@ export default function BlogPostForm() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const form = event.currentTarget;
+
     if (selectedFiles.length === 0) {
       setStatus({
         type: "error",
@@ -164,11 +173,36 @@ export default function BlogPostForm() {
     setStatus({ type: "idle", message: "" });
 
     try {
-      const formData = new FormData(event.currentTarget);
+      // Shrink photos in the browser so the request stays under the upload size
+      // limit (and so iPhone HEIC photos become universally viewable JPEGs).
+      setIsOptimizing(true);
+
+      const uploadFiles = await Promise.all(
+        selectedFiles.map((file) => compressImageForUpload(file)),
+      );
+
+      setIsOptimizing(false);
+
+      const totalBytes = uploadFiles.reduce(
+        (sum, file) => sum + file.size,
+        0,
+      );
+
+      if (totalBytes > MAX_UPLOAD_TOTAL_BYTES) {
+        setStatus({
+          type: "error",
+          message:
+            "These images are too large to upload from this browser. Please use JPG or PNG photos, or upload fewer at a time.",
+        });
+
+        return;
+      }
+
+      const formData = new FormData(form);
 
       formData.delete("images");
 
-      selectedFiles.forEach((file) => {
+      uploadFiles.forEach((file) => {
         formData.append("images", file);
       });
 
@@ -177,13 +211,14 @@ export default function BlogPostForm() {
         body: formData,
       });
 
-      const result = (await response.json()) as {
+      const result = (await response.json().catch(() => ({}))) as {
         error?: string;
       };
 
       if (!response.ok) {
         throw new Error(
-          result.error ?? "Failed to publish the post.",
+          result.error ??
+            `Failed to publish the post. (${response.status})`,
         );
       }
 
@@ -209,6 +244,7 @@ export default function BlogPostForm() {
               : "Failed to publish the post.",
       });
     } finally {
+      setIsOptimizing(false);
       setIsSubmitting(false);
     }
   }
@@ -383,7 +419,11 @@ export default function BlogPostForm() {
           disabled={isSubmitting}
           className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-neutral-950 px-5 py-3 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isSubmitting ? "Publishing..." : "Publish post"}
+          {isOptimizing
+            ? "Optimizing images..."
+            : isSubmitting
+              ? "Publishing..."
+              : "Publish post"}
         </button>
       </form>
     </section>
