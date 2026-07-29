@@ -132,6 +132,106 @@ function isSameOriginRequest(request: Request): boolean {
   }
 }
 
+interface UploadableImage {
+  buffer: Buffer;
+  contentType: string;
+  extension: string;
+}
+
+const SHARED_IMAGE_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+
+function isBlockedSharedImageHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+
+  return (
+    host === "localhost" ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal") ||
+    // Raw IPv4 or IPv6 addresses cannot be public CDN hosts we trust.
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(host) ||
+    host.includes(":")
+  );
+}
+
+/*
+ * Download a catalog item's image so a shared product can become the post
+ * cover. Only public https image URLs are accepted, and the final URL is
+ * re-validated after redirects.
+ */
+async function downloadSharedImage(
+  rawUrl: string,
+): Promise<UploadableImage | null> {
+  let url: URL;
+
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+
+  if (url.protocol !== "https:" || isBlockedSharedImageHost(url.hostname)) {
+    return null;
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      headers: {
+        Accept: "image/*",
+        "User-Agent":
+          process.env.COLLECTOR_USER_AGENT ?? "Mozilla/5.0 CrazySajangnim/1.0",
+      },
+      redirect: "follow",
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch {
+    return null;
+  }
+
+  if (!response.ok) {
+    return null;
+  }
+
+  try {
+    const finalUrl = new URL(response.url);
+
+    if (
+      finalUrl.protocol !== "https:" ||
+      isBlockedSharedImageHost(finalUrl.hostname)
+    ) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  const contentType = (response.headers.get("content-type") ?? "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+
+  const extension = SHARED_IMAGE_EXTENSIONS[contentType];
+
+  if (!extension) {
+    return null;
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+
+  if (buffer.length === 0 || buffer.length > MAX_IMAGE_SIZE) {
+    return null;
+  }
+
+  return { buffer, contentType, extension };
+}
+
 export async function GET() {
   try {
     const supabase = getSupabaseAdmin();
@@ -240,14 +340,23 @@ export async function POST(request: Request) {
           value instanceof File && value.size > 0,
       );
 
-    if (images.length === 0) {
+    const sharedImageUrls = formData
+      .getAll("sharedImageUrls")
+      .filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0,
+      );
+
+    const totalImageCount = images.length + sharedImageUrls.length;
+
+    if (totalImageCount === 0) {
       return NextResponse.json(
         { error: "Please select at least one clothing image." },
         { status: 400 },
       );
     }
 
-    if (images.length > MAX_IMAGE_COUNT) {
+    if (totalImageCount > MAX_IMAGE_COUNT) {
       return NextResponse.json(
         {
           error: `You can upload up to ${MAX_IMAGE_COUNT} images per post.`,
@@ -277,25 +386,51 @@ export async function POST(request: Request) {
       }
     }
 
+    /*
+     * Shared catalog images are downloaded server-side and become the post
+     * cover, followed by any uploaded files.
+     */
+    const uploadableImages: UploadableImage[] = [];
+
+    for (const sharedImageUrl of sharedImageUrls) {
+      const sharedImage = await downloadSharedImage(sharedImageUrl);
+
+      if (!sharedImage) {
+        return NextResponse.json(
+          {
+            error:
+              "The shared item image could not be attached. Please add a photo manually.",
+          },
+          { status: 400 },
+        );
+      }
+
+      uploadableImages.push(sharedImage);
+    }
+
+    for (const image of images) {
+      uploadableImages.push({
+        buffer: Buffer.from(await image.arrayBuffer()),
+        contentType: getStorageContentType(image),
+        extension: getFileExtension(image),
+      });
+    }
+
     const supabase = getSupabaseAdmin();
     const postFolder = crypto.randomUUID();
     const imageUrls: string[] = [];
 
-    for (const [index, image] of images.entries()) {
-      const extension = getFileExtension(image);
-
+    for (const [index, image] of uploadableImages.entries()) {
       const imagePath = [
         new Date().getUTCFullYear(),
         postFolder,
-        `${index + 1}-${crypto.randomUUID()}.${extension}`,
+        `${index + 1}-${crypto.randomUUID()}.${image.extension}`,
       ].join("/");
-
-      const imageBuffer = Buffer.from(await image.arrayBuffer());
 
       const { error: uploadError } = await supabase.storage
         .from("blog-images")
-        .upload(imagePath, imageBuffer, {
-          contentType: getStorageContentType(image),
+        .upload(imagePath, image.buffer, {
+          contentType: image.contentType,
           cacheControl: "31536000",
           upsert: false,
         });

@@ -33,6 +33,35 @@ create policy "Anyone can view blog posts"
   to anon, authenticated
   using (true);
 
+create table if not exists public.blog_comments (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null
+    references public.blog_posts (id) on delete cascade,
+  author_name varchar(40) not null default 'Anonymous',
+  content text not null,
+  created_at timestamptz not null default now(),
+
+  constraint blog_comments_content_length
+    check (char_length(content) between 1 and 1000),
+
+  constraint blog_comments_author_length
+    check (char_length(author_name) between 1 and 40)
+);
+
+create index if not exists blog_comments_post_created_idx
+  on public.blog_comments (post_id, created_at);
+
+alter table public.blog_comments enable row level security;
+
+drop policy if exists "Anyone can view blog comments"
+  on public.blog_comments;
+
+create policy "Anyone can view blog comments"
+  on public.blog_comments
+  for select
+  to anon, authenticated
+  using (true);
+
 insert into storage.buckets (
   id,
   name,

@@ -1,17 +1,50 @@
 "use client";
 
-import { useState } from "react";
-import type { Product } from "@/types/product";
+import { type MouseEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+
 import { formatPrice } from "@/lib/utils";
+import {
+  BLOG_SHARE_DRAFT_KEY,
+  type BlogShareDraft,
+} from "@/types/blog";
+import type { Product } from "@/types/product";
 
 interface ProductCardProps {
   product: Product;
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const router = useRouter();
   const [imageFailed, setImageFailed] = useState(false);
 
-  const isVerified =
+  function handleShare(event: MouseEvent<HTMLButtonElement>) {
+    // The card itself is a link to the retailer — keep the click local.
+    event.preventDefault();
+    event.stopPropagation();
+
+    const draft: BlogShareDraft = {
+      brandName: product.brandName,
+      productName: product.productName,
+      salePrice: product.salePrice,
+      originalPrice: product.originalPrice,
+      discountPercentage: product.discountPercentage,
+      currency: product.currency,
+      sourceName: product.sourceName,
+      sourceUrl: product.sourceUrl,
+      imageUrl: imageFailed ? "" : product.imageUrl,
+    };
+
+    try {
+      sessionStorage.setItem(BLOG_SHARE_DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      // Storage unavailable — the form simply starts empty.
+    }
+
+    router.push("/blog");
+  }
+
+  const hasVerifiedDiscount =
     product.saleVerification === "VERIFIED" &&
     product.originalPrice !== null &&
     product.discountPercentage !== null;
@@ -40,18 +73,16 @@ export function ProductCard({ product }: ProductCardProps) {
                   {product.brandName}
                 </p>
 
-                <p className="mt-3 text-xs text-black/45">
-                  Image unavailable
-                </p>
+                <p className="mt-3 text-xs text-black/45">Image unavailable</p>
               </div>
             </div>
           )}
 
-          <span className="absolute left-3 top-3 bg-[#d8432e] px-2.5 py-1 text-xs font-semibold text-white">
-            {isVerified
-              ? `${product.discountPercentage}% OFF`
-              : "SALE"}
-          </span>
+          {hasVerifiedDiscount && (
+            <span className="absolute left-3 top-3 bg-[#d8432e] px-2.5 py-1 text-xs font-semibold text-white">
+              {product.discountPercentage}% OFF
+            </span>
+          )}
         </div>
 
         <div className="pt-4">
@@ -76,19 +107,22 @@ export function ProductCard({ product }: ProductCardProps) {
 
             {product.originalPrice !== null && (
               <span className="text-xs text-black/40 line-through">
-                {formatPrice(
-                  product.originalPrice,
-                  product.currency,
-                )}
+                {formatPrice(product.originalPrice, product.currency)}
               </span>
             )}
           </div>
 
-          {!isVerified && (
-            <p className="mt-2 text-[11px] text-black/45">
-              Original price not provided by retailer
-            </p>
-          )}
+          <p className="mt-2 text-[11px] text-black/45">
+            Verified from the retailer during the latest catalog refresh
+          </p>
+
+          <button
+            type="button"
+            onClick={handleShare}
+            className="mt-3 inline-flex min-h-9 items-center justify-center border border-black/15 px-3 text-xs font-semibold uppercase tracking-[0.08em] transition hover:bg-black hover:text-white"
+          >
+            Share on blog
+          </button>
         </div>
       </article>
     </a>

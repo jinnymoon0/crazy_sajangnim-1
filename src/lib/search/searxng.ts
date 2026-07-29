@@ -23,6 +23,18 @@ export interface SearxngSearchResponse {
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_ATTEMPTS = 2;
 
+/*
+ * When SearXNG reports several unresponsive upstream engines, those engines are
+ * being rate-limited (too many requests / CAPTCHA). Briefly back off so a burst
+ * of queries does not push the shared instance further into suspension, which
+ * returns degraded, product-less results. The cooldown is shared across
+ * concurrent callers and self-clears once engines recover.
+ */
+const THROTTLE_ENGINE_THRESHOLD = 3;
+const THROTTLE_COOLDOWN_MS = 2_000;
+
+let throttledUntil = 0;
+
 function getSearxngUrl(): string {
   const value = process.env.SEARXNG_URL?.trim();
 
@@ -131,8 +143,22 @@ export async function searchSearxng(
     attempt <= MAX_ATTEMPTS;
     attempt += 1
   ) {
+    const cooldownRemaining = throttledUntil - Date.now();
+
+    if (cooldownRemaining > 0) {
+      await wait(cooldownRemaining);
+    }
+
     try {
-      return await requestSearxng(url);
+      const result = await requestSearxng(url);
+
+      if (
+        result.unresponsiveEngines.length >= THROTTLE_ENGINE_THRESHOLD
+      ) {
+        throttledUntil = Date.now() + THROTTLE_COOLDOWN_MS;
+      }
+
+      return result;
     } catch (error) {
       lastError = error;
 

@@ -7,12 +7,14 @@ import { inferBrand } from "@/lib/products/infer-brand";
 import { inferCategory } from "@/lib/products/infer-category";
 import { extractProductsFromPage } from "@/lib/products/extract-products-from-page";
 import { upsertProducts } from "@/lib/products/product-repository";
+import { collectDirectProducts } from "@/lib/products/sources";
 import { searchSearxng, type SearxngResult } from "@/lib/search/searxng";
 import { calculateDiscountPercentage } from "@/lib/utils";
 import type { Gender, Market, Product } from "@/types/product";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 interface BrandSearch {
   slug: BrandSlug;
@@ -88,7 +90,7 @@ const BRANDS: BrandSearch[] = [
   },
 ];
 
-const BLOCKED_DIRECT_RETAILER_DOMAINS = ["farfetch.com"];
+const BLOCKED_DIRECT_RETAILER_DOMAINS = ["lyst.com", "farfetch.com"];
 
 const BLOCKED_RESULT_DOMAINS = [
   "wikipedia.org",
@@ -529,7 +531,13 @@ function normalizeProduct(
 
     discountPercentage: verifiedPrices?.discountPercentage ?? null,
 
-    saleVerification: verifiedPrices ? "VERIFIED" : "UNVERIFIED",
+    /*
+     * Snippet-derived pairs take the lowest and highest prices mentioned in
+     * a search result, which routinely mixes unrelated products. Treat every
+     * snippet price as an estimate; only page-level structured data or a
+     * direct retailer feed may produce VERIFIED prices.
+     */
+    saleVerification: "UNVERIFIED",
 
     isAvailable: true,
     collectedAt: new Date().toISOString(),
@@ -1033,7 +1041,21 @@ async function searchBrand(
 }
 
 export async function GET(request: NextRequest) {
-  if (!process.env.SEARXNG_URL?.trim()) {
+  const marketParameter = request.nextUrl.searchParams.get("market");
+
+  const genderParameter = request.nextUrl.searchParams.get("gender");
+
+  const debug = request.nextUrl.searchParams.get("debug") === "true";
+
+  const directOnly = request.nextUrl.searchParams.get("mode") === "direct";
+
+  const market: Market = isMarket(marketParameter) ? marketParameter : "US";
+
+  const gender: Exclude<Gender, "UNISEX"> = isRequestedGender(genderParameter)
+    ? genderParameter
+    : "MEN";
+
+  if (!directOnly && !process.env.SEARXNG_URL?.trim()) {
     return NextResponse.json(
       {
         error: "SEARXNG_URL is missing.",
@@ -1044,17 +1066,58 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const marketParameter = request.nextUrl.searchParams.get("market");
+  /*
+   * Crawl retailer catalogs directly first. Persist immediately so the
+   * verified products survive even if the slower search-engine phase
+   * times out on the serverless runtime.
+   */
+  let directProducts: Product[] = [];
+  let directSavedCount = 0;
+  let directPersistenceError: string | null = null;
 
-  const genderParameter = request.nextUrl.searchParams.get("gender");
+  try {
+    directProducts = await collectDirectProducts(market);
+  } catch (error) {
+    console.error("Direct source collection failed:", error);
+  }
 
-  const debug = request.nextUrl.searchParams.get("debug") === "true";
+  if (directProducts.length > 0) {
+    try {
+      directSavedCount = await upsertProducts(directProducts);
+    } catch (error) {
+      directPersistenceError =
+        error instanceof Error
+          ? error.message
+          : "Unable to save direct source products.";
 
-  const market: Market = isMarket(marketParameter) ? marketParameter : "US";
+      console.error("Direct product persistence failed:", error);
+    }
+  }
 
-  const gender: Exclude<Gender, "UNISEX"> = isRequestedGender(genderParameter)
-    ? genderParameter
-    : "MEN";
+  const visibleDirectProducts = directProducts.filter(
+    (product) => product.gender === gender || product.gender === "UNISEX",
+  );
+
+  if (directOnly) {
+    return NextResponse.json({
+      products: visibleDirectProducts,
+      count: visibleDirectProducts.length,
+      market,
+      gender,
+      updatedAt: new Date().toISOString(),
+
+      ...(debug
+        ? {
+            diagnostics: {
+              provider: "direct",
+              directCollected: directProducts.length,
+              directSavedCount,
+              directPersistenceError,
+            },
+          }
+        : {}),
+    });
+  }
 
   const brandLimit = pLimit(2);
 
@@ -1083,7 +1146,11 @@ export async function GET(request: NextRequest) {
     .map((result) => result.error)
     .filter((error): error is string => Boolean(error));
 
-  if (products.length === 0 && errors.length === results.length) {
+  if (
+    products.length === 0 &&
+    visibleDirectProducts.length === 0 &&
+    errors.length === results.length
+  ) {
     return NextResponse.json(
       {
         error: errors[0] ?? "Unable to retrieve sale listings.",
@@ -1108,9 +1175,18 @@ export async function GET(request: NextRequest) {
     console.error("Product catalog persistence failed:", error);
   }
 
+  const combinedProducts = Array.from(
+    new Map(
+      [...visibleDirectProducts, ...products].map((product) => [
+        [product.sourceName, product.productName, product.salePrice].join("|"),
+        product,
+      ]),
+    ).values(),
+  );
+
   return NextResponse.json({
-    products,
-    count: products.length,
+    products: combinedProducts,
+    count: combinedProducts.length,
     market,
     gender,
     updatedAt: new Date().toISOString(),
@@ -1118,7 +1194,11 @@ export async function GET(request: NextRequest) {
     ...(debug
       ? {
           diagnostics: {
-            provider: "searxng",
+            provider: "searxng+direct",
+
+            directCollected: directProducts.length,
+            directSavedCount,
+            directPersistenceError,
 
             brandSearches: searchableBrands.length,
 

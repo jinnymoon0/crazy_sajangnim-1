@@ -47,7 +47,7 @@ export function Header({
                   : "hover:bg-black/5"
               }`}
             >
-              English
+              US
             </button>
 
             <button
@@ -59,7 +59,7 @@ export function Header({
                   : "hover:bg-black/5"
               }`}
             >
-              Korean
+              Korea
             </button>
           </div>
         </div>
