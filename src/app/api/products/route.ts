@@ -7,6 +7,7 @@ import { inferBrand } from "@/lib/products/infer-brand";
 import { inferCategory } from "@/lib/products/infer-category";
 import { inferGender } from "@/lib/products/infer-gender";
 import { extractProductsFromPage } from "@/lib/products/extract-products-from-page";
+import { upsertProducts } from "@/lib/products/product-repository";
 import { searchSearxng, type SearxngResult } from "@/lib/search/searxng";
 import { calculateDiscountPercentage } from "@/lib/utils";
 import type { Gender, Market, Product } from "@/types/product";
@@ -264,6 +265,23 @@ function resolveSalePrices(text: string, market: Market): ParsedPrices | null {
   return null;
 }
 
+function resolveSingleSalePrice(text: string, market: Market): number | null {
+  const prices = uniqueSortedPrices(
+    market === "KR" ? extractKrwPrices(text) : extractUsdPrices(text),
+  );
+
+  if (prices.length === 0) {
+    return null;
+  }
+
+  /*
+   * The result has already passed the sale-term check.
+   * Use the lowest visible price as an unverified sale price
+   * when no original price is available.
+   */
+  return prices[0];
+}
+
 function getSourceName(result: SearxngResult): string {
   try {
     return new URL(result.url).hostname.replace(/^www\./, "");
@@ -375,9 +393,19 @@ function normalizeProduct(
     return null;
   }
 
-  const prices = resolveSalePrices(text, market);
+  const verifiedPrices = resolveSalePrices(text, market);
 
-  if (!prices) {
+  const fallbackSalePrice = verifiedPrices
+    ? null
+    : resolveSingleSalePrice(text, market);
+
+  if (!verifiedPrices && !fallbackSalePrice) {
+    return null;
+  }
+
+  const salePrice = verifiedPrices?.salePrice ?? fallbackSalePrice;
+
+  if (!salePrice) {
     return null;
   }
 
@@ -400,10 +428,13 @@ function normalizeProduct(
 
     imageUrl,
 
-    originalPrice: prices.originalPrice,
-    salePrice: prices.salePrice,
-    discountPercentage: prices.discountPercentage,
-    saleVerification: "VERIFIED",
+    originalPrice: verifiedPrices?.originalPrice ?? null,
+
+    salePrice,
+
+    discountPercentage: verifiedPrices?.discountPercentage ?? null,
+
+    saleVerification: verifiedPrices ? "VERIFIED" : "UNVERIFIED",
 
     isAvailable: true,
     collectedAt: new Date().toISOString(),
@@ -785,6 +816,20 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  let savedCount = 0;
+  let persistenceError: string | null = null;
+
+  try {
+    savedCount = await upsertProducts(products);
+  } catch (error) {
+    persistenceError =
+      error instanceof Error
+        ? error.message
+        : "Unable to save products to the catalog.";
+
+    console.error("Product catalog persistence failed:", error);
+  }
+
   return NextResponse.json({
     products,
     count: products.length,
@@ -807,6 +852,9 @@ export async function GET(request: NextRequest) {
             productsBeforeDeduplication: allProducts.length,
 
             productsAfterDeduplication: products.length,
+
+            savedCount,
+            persistenceError,
 
             byBrand: BRANDS.map((brand, index) => ({
               brand: brand.englishName,
