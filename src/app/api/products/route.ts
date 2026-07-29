@@ -5,7 +5,6 @@ import { NextRequest, NextResponse } from "next/server";
 import type { BrandSlug } from "@/constants/brands";
 import { inferBrand } from "@/lib/products/infer-brand";
 import { inferCategory } from "@/lib/products/infer-category";
-import { inferGender } from "@/lib/products/infer-gender";
 import { extractProductsFromPage } from "@/lib/products/extract-products-from-page";
 import { upsertProducts } from "@/lib/products/product-repository";
 import { searchSearxng, type SearxngResult } from "@/lib/search/searxng";
@@ -21,10 +20,22 @@ interface BrandSearch {
   koreanName: string;
 }
 
+interface BrandSearchDiagnostics {
+  explicitBrandMatches: number;
+  resultsWithImages: number;
+  resultsWithPrices: number;
+  resultsWithSaleTerms: number;
+  secondHandResults: number;
+  pageCandidates: number;
+  extractedProducts: number;
+  fallbackProducts: number;
+}
+
 interface BrandSearchResult {
   products: Product[];
   rawCount: number;
   unresponsiveEngines: Array<[string, string]>;
+  diagnostics: BrandSearchDiagnostics;
   error?: string;
 }
 
@@ -76,6 +87,36 @@ const BRANDS: BrandSearch[] = [
     koreanName: "니들스",
   },
 ];
+
+const BLOCKED_DIRECT_RETAILER_DOMAINS = ["farfetch.com"];
+
+const BLOCKED_RESULT_DOMAINS = [
+  "wikipedia.org",
+  "vogue.com",
+  "pinterest.com",
+  "instagram.com",
+  "facebook.com",
+  "youtube.com",
+  "reddit.com",
+];
+
+const BLOCKED_PRODUCT_URL_TERMS = [
+  "/wiki/",
+  "/fashion-shows/",
+  "/collections/",
+  "/collection/",
+  "/brands/",
+  "/brand/",
+  "/search",
+  "brandshop",
+  "brandShop",
+];
+
+const MEN_ONLY_BRAND_SLUGS = new Set<BrandSlug>([
+  "beams-plus",
+  "comoli",
+  "kamiya",
+]);
 
 const SECOND_HAND_TERMS = [
   "used",
@@ -137,7 +178,10 @@ function createQuery(
     ].join(" ");
   }
 
-  const genderTerms = gender === "MEN" ? "(men OR mens)" : "(women OR womens)";
+  const genderTerms =
+    gender === "MEN"
+      ? '(men OR mens OR menswear OR "men\'s")'
+      : '(women OR womens OR womenswear OR "women\'s" OR female)';
 
   return [
     `"${brand.englishName}"`,
@@ -364,6 +408,46 @@ function resultExplicitlyMatchesBrand(
   );
 }
 
+function isBlockedResultUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+
+    if (
+      BLOCKED_DIRECT_RETAILER_DOMAINS.some(
+        (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+      )
+    ) {
+      return true;
+    }
+    const pathAndQuery = `${url.pathname}${url.search}`.toLowerCase();
+
+    if (
+      BLOCKED_RESULT_DOMAINS.some(
+        (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+      )
+    ) {
+      return true;
+    }
+
+    return BLOCKED_PRODUCT_URL_TERMS.some((term) =>
+      pathAndQuery.includes(term.toLowerCase()),
+    );
+  } catch {
+    return true;
+  }
+}
+
+function isReasonablePrice(price: number, market: Market): boolean {
+  if (!Number.isFinite(price)) {
+    return false;
+  }
+
+  return market === "KR"
+    ? price >= 10_000 && price <= 20_000_000
+    : price >= 20 && price <= 50_000;
+}
+
 function normalizeProduct(
   result: SearxngResult,
   brand: BrandSearch,
@@ -373,17 +457,28 @@ function normalizeProduct(
   const title = result.title.trim();
   const sourceUrl = result.url.trim();
 
+  if (isBlockedResultUrl(sourceUrl)) {
+    return null;
+  }
+
   if (!resultExplicitlyMatchesBrand(result, brand)) {
     return null;
   }
-  const imageUrl = getImageUrl(result);
+  const imageUrl = getImageUrl(result) ?? "/product-placeholder.svg";
+
   const text = getResultText(result);
 
-  if (!title || !sourceUrl || !imageUrl) {
+  if (!title || !sourceUrl) {
     return null;
   }
 
-  if (!containsSaleTerm(text) || isSecondHandResult(text)) {
+  /*
+   * Every result was discovered through a sale-specific query.
+   * Search-engine snippets do not always repeat the words
+   * "sale", "discount", or "clearance", so do not reject a
+   * result solely because the snippet omits those terms.
+   */
+  if (isSecondHandResult(text)) {
     return null;
   }
 
@@ -405,7 +500,7 @@ function normalizeProduct(
 
   const salePrice = verifiedPrices?.salePrice ?? fallbackSalePrice;
 
-  if (!salePrice) {
+  if (!salePrice || !isReasonablePrice(salePrice, market)) {
     return null;
   }
 
@@ -418,7 +513,7 @@ function normalizeProduct(
     market,
     currency: market === "KR" ? "KRW" : "USD",
 
-    gender: inferGender(text, requestedGender),
+    gender: requestedGender,
 
     brandSlug: detectedBrand.slug,
     brandName: detectedBrand.name,
@@ -445,7 +540,10 @@ function createRetailerQueries(
   brand: BrandSearch,
   gender: Exclude<Gender, "UNISEX">,
 ): string[] {
-  const genderTerm = gender === "MEN" ? "(men OR mens)" : "(women OR womens)";
+  const genderTerm =
+    gender === "MEN"
+      ? '(men OR mens OR menswear OR "men\'s")'
+      : '(women OR womens OR womenswear OR "women\'s" OR female)';
 
   const preferredDomains = [
     "ssense.com",
@@ -456,6 +554,17 @@ function createRetailerQueries(
     "shopneighbour.com",
     "tres-bien.com",
     "svrn.com",
+    "mytheresa.com",
+    "net-a-porter.com",
+    "24s.com",
+    "luisaviaroma.com",
+    "ln-cc.com",
+    "slamjam.com",
+    "havenshop.com",
+    "canoeclub.us",
+    "shoplostfound.com",
+    "norsestore.com",
+    "goodhoodstore.com",
   ];
 
   return preferredDomains.map((domain) =>
@@ -476,7 +585,10 @@ function createDirectRetailerQueries(
   brand: BrandSearch,
   gender: Exclude<Gender, "UNISEX">,
 ): string[] {
-  const genderTerms = gender === "MEN" ? "(men OR mens)" : "(women OR womens)";
+  const genderTerms =
+    gender === "MEN"
+      ? '(men OR mens OR menswear OR "men\'s")'
+      : '(women OR womens OR womenswear OR "women\'s" OR female)';
 
   const domains = [
     "lyst.com",
@@ -495,6 +607,36 @@ function createDirectRetailerQueries(
     "cettire.com",
     "giglio.com",
     "vitkac.com",
+    "24s.com",
+    "mytheresa.com",
+    "net-a-porter.com",
+    "nordstrom.com",
+    "saksfifthavenue.com",
+    "bergdorfgoodman.com",
+    "harrods.com",
+    "libertylondon.com",
+    "ln-cc.com",
+    "matchesfashion.com",
+    "luisaviaroma.com",
+    "brownsfashion.com",
+    "thewebster.com",
+    "wrongweather.net",
+    "slamjam.com",
+    "bstn.com",
+    "feature.com",
+    "bodega.com",
+    "unionlosangeles.com",
+    "canoeclub.us",
+    "bluebuttonshop.com",
+    "shoplostfound.com",
+    "havenshop.com",
+    "gravitypope.com",
+    "goodhoodstore.com",
+    "couvertureandthegarbstore.com",
+    "norsestore.com",
+    "ssense.com",
+    "shopbop.com",
+    "revolve.com",
   ];
 
   return domains.map((domain) =>
@@ -520,12 +662,14 @@ function createCategoryQueries(
       gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)";
 
     const categories = [
-      "자켓 코트",
-      "셔츠 티셔츠",
-      "니트 스웨터 가디건",
-      "팬츠 데님",
-      "신발 스니커즈",
-      "가방 액세서리",
+      "자켓 코트 블레이저",
+      "셔츠 블라우스 티셔츠",
+      "니트 스웨터 가디건 베스트",
+      "팬츠 바지 데님 청바지",
+      "스커트 원피스 드레스",
+      "신발 스니커즈 부츠 샌들",
+      "가방 토트백 숄더백",
+      "모자 벨트 지갑 액세서리",
     ];
 
     return categories.map((category) =>
@@ -540,15 +684,20 @@ function createCategoryQueries(
     );
   }
 
-  const genderTerms = gender === "MEN" ? "(men OR mens)" : "(women OR womens)";
+  const genderTerms =
+    gender === "MEN"
+      ? '(men OR mens OR menswear OR "men\'s")'
+      : '(women OR womens OR womenswear OR "women\'s" OR female)';
 
   const categories = [
-    "(jacket OR coat OR blazer)",
-    "(shirt OR t-shirt OR polo)",
-    "(sweater OR knitwear OR cardigan)",
-    "(pants OR trousers OR jeans)",
-    "(shoes OR sneakers OR boots)",
-    "(bag OR hat OR accessories)",
+    "(jacket OR coat OR blazer OR outerwear)",
+    "(shirt OR blouse OR t-shirt OR polo OR top)",
+    "(sweater OR knitwear OR cardigan OR vest)",
+    "(pants OR trousers OR jeans OR shorts)",
+    "(skirt OR dress OR gown)",
+    "(shoes OR sneakers OR boots OR sandals OR loafers)",
+    "(bag OR tote OR shoulder bag OR backpack)",
+    "(hat OR belt OR wallet OR scarf OR accessories)",
   ];
 
   return categories.map((category) =>
@@ -565,6 +714,97 @@ function createCategoryQueries(
   );
 }
 
+function createKoreanRetailerQueries(
+  brand: BrandSearch,
+  gender: Exclude<Gender, "UNISEX">,
+): string[] {
+  const genderTerms =
+    gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)";
+
+  const domains = [
+    "musinsa.com",
+    "29cm.co.kr",
+    "wconcept.co.kr",
+    "ssfshop.com",
+    "lfmall.co.kr",
+    "hanstyle.com",
+    "trenbe.com",
+    "mustit.co.kr",
+    "balaan.co.kr",
+    "lotteon.com",
+    "ssg.com",
+    "galleria.co.kr",
+    "thehyundai.com",
+    "shinsegaemall.ssg.com",
+    "kream.co.kr",
+    "empty.seoul.kr",
+    "8division.com",
+    "beakerstore.com",
+    "worksout.co.kr",
+    "kasina.co.kr",
+    "boon-shop.com",
+    "eqlstore.com",
+    "hago.kr",
+    "ocokorea.com",
+  ];
+
+  return domains.map((domain) =>
+    [
+      `site:${domain}`,
+      `("${brand.englishName}" OR "${brand.koreanName}")`,
+      genderTerms,
+      "(세일 OR 할인 OR 시즌오프 OR 아울렛 OR 특가)",
+      '("판매가" OR "할인가" OR "정가" OR "원")',
+      "-중고",
+      "-리셀",
+    ].join(" "),
+  );
+}
+
+function createWomenProductQueries(brand: BrandSearch): string[] {
+  const categories = [
+    "dress",
+    "skirt",
+    "blouse",
+    "women jacket",
+    "women trousers",
+    "women sweater",
+    "women shirt",
+    "women shoes",
+    "women bag",
+    "women accessories",
+  ];
+
+  const domains = [
+    "lyst.com",
+    "farfetch.com",
+    "ssense.com",
+    "yoox.com",
+    "modesens.com",
+    "mytheresa.com",
+    "net-a-porter.com",
+    "24s.com",
+    "shopbop.com",
+    "revolve.com",
+    "luisaviaroma.com",
+    "cettire.com",
+  ];
+
+  return domains.flatMap((domain) =>
+    categories.map((category) =>
+      [
+        `site:${domain}`,
+        `"${brand.englishName}"`,
+        `"${category}"`,
+        "(sale OR discount OR clearance OR markdown)",
+        "-used",
+        "-resale",
+        "-preowned",
+      ].join(" "),
+    ),
+  );
+}
+
 function createSearchQueries(
   brand: BrandSearch,
   market: Market,
@@ -576,6 +816,7 @@ function createSearchQueries(
     return [
       baseQuery,
       ...createCategoryQueries(brand, market, gender),
+      ...createKoreanRetailerQueries(brand, gender),
       [
         `("${brand.englishName}" OR "${brand.koreanName}")`,
         gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)",
@@ -599,6 +840,7 @@ function createSearchQueries(
   return [
     baseQuery,
     ...createCategoryQueries(brand, market, gender),
+    ...(gender === "WOMEN" ? createWomenProductQueries(brand) : []),
     ...createDirectRetailerQueries(brand, gender),
     ...createRetailerQueries(brand, gender),
     [
@@ -701,9 +943,7 @@ async function searchBrand(
     const text = getResultText(result);
 
     return (
-      resultExplicitlyMatchesBrand(result, brand) &&
-      containsSaleTerm(text) &&
-      !isSecondHandResult(text)
+      resultExplicitlyMatchesBrand(result, brand) && !isSecondHandResult(text)
     );
   });
 
@@ -751,10 +991,42 @@ async function searchBrand(
    * Accuracy checks still occur before this point.
    */
 
+  const diagnostics: BrandSearchDiagnostics = {
+    explicitBrandMatches: uniqueResults.filter((result) =>
+      resultExplicitlyMatchesBrand(result, brand),
+    ).length,
+
+    resultsWithImages: uniqueResults.filter(
+      (result) => getImageUrl(result) !== null,
+    ).length,
+
+    resultsWithPrices: uniqueResults.filter((result) => {
+      const text = getResultText(result);
+
+      return (
+        resolveSalePrices(text, market) !== null ||
+        resolveSingleSalePrice(text, market) !== null
+      );
+    }).length,
+
+    resultsWithSaleTerms: uniqueResults.filter((result) =>
+      containsSaleTerm(getResultText(result)),
+    ).length,
+
+    secondHandResults: uniqueResults.filter((result) =>
+      isSecondHandResult(getResultText(result)),
+    ).length,
+
+    pageCandidates: pageCandidates.length,
+    extractedProducts: extractedProducts.length,
+    fallbackProducts: fallbackProducts.length,
+  };
+
   return {
     products,
     rawCount: uniqueResults.length,
     unresponsiveEngines: uniqueEngineErrors,
+    diagnostics,
     error:
       uniqueResults.length === 0 && errors.length > 0 ? errors[0] : undefined,
   };
@@ -786,8 +1058,14 @@ export async function GET(request: NextRequest) {
 
   const brandLimit = pLimit(2);
 
+  const searchableBrands = BRANDS.filter(
+    (brand) => gender !== "WOMEN" || !MEN_ONLY_BRAND_SLUGS.has(brand.slug),
+  );
+
   const results = await Promise.all(
-    BRANDS.map((brand) => brandLimit(() => searchBrand(brand, market, gender))),
+    searchableBrands.map((brand) =>
+      brandLimit(() => searchBrand(brand, market, gender)),
+    ),
   );
 
   const allProducts = results.flatMap((result) => result.products);
@@ -842,7 +1120,7 @@ export async function GET(request: NextRequest) {
           diagnostics: {
             provider: "searxng",
 
-            brandSearches: BRANDS.length,
+            brandSearches: searchableBrands.length,
 
             rawResults: results.reduce(
               (total, result) => total + result.rawCount,
@@ -856,10 +1134,11 @@ export async function GET(request: NextRequest) {
             savedCount,
             persistenceError,
 
-            byBrand: BRANDS.map((brand, index) => ({
+            byBrand: searchableBrands.map((brand, index) => ({
               brand: brand.englishName,
               rawResults: results[index].rawCount,
               products: results[index].products.length,
+              rejectionDiagnostics: results[index].diagnostics,
               error: results[index].error,
               unresponsiveEngines: results[index].unresponsiveEngines,
             })),

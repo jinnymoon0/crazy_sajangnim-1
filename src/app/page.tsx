@@ -9,59 +9,43 @@ import { ProductGrid } from "@/components/products/ProductGrid";
 import { useProducts } from "@/hooks/use-products";
 import type { BrandSlug } from "@/constants/brands";
 import type { CategorySlug } from "@/constants/categories";
-import type {
-  Gender,
-  Market,
-  ProductSort,
-} from "@/types/product";
+import type { Gender, Market, ProductSort } from "@/types/product";
 
 type SelectableGender = Exclude<Gender, "UNISEX">;
 
 export default function HomePage() {
   const [market, setMarket] = useState<Market>("US");
-  const [gender, setGender] =
-    useState<SelectableGender>("MEN");
+  const [gender, setGender] = useState<SelectableGender>("MEN");
 
-  const [sidebarOpen, setSidebarOpen] =
-    useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const [selectedBrands, setSelectedBrands] = useState<
-    BrandSlug[]
-  >([]);
+  const [selectedBrands, setSelectedBrands] = useState<BrandSlug[]>([]);
 
-  const [selectedCategory, setSelectedCategory] =
-    useState<CategorySlug>("all");
+  const [selectedCategory, setSelectedCategory] = useState<CategorySlug>("all");
 
-  const [sort, setSort] =
-    useState<ProductSort>("discount-desc");
+  const [sort, setSort] = useState<ProductSort>("discount-desc");
 
-  const {
-    data,
-    error,
-    isLoading,
-    isValidating,
-    mutate,
-  } = useProducts(market, gender);
+  const { data, error, isLoading, isValidating, mutate } = useProducts(
+    market,
+    gender,
+  );
 
   const products = useMemo(() => {
-    const filtered = (data?.products ?? []).filter(
-      (product) => {
-        const matchesBrand =
-          selectedBrands.length === 0 ||
-          selectedBrands.includes(product.brandSlug);
+    const filtered = (data?.products ?? []).filter((product) => {
+      const matchesBrand =
+        selectedBrands.length === 0 ||
+        selectedBrands.includes(product.brandSlug);
 
-        const matchesCategory =
-          selectedCategory === "all" ||
-          product.categorySlug === selectedCategory;
+      const matchesCategory =
+        selectedCategory === "all" || product.categorySlug === selectedCategory;
 
-        return (
-          matchesBrand &&
-          matchesCategory &&
-          product.isAvailable &&
-          product.salePrice > 0
-        );
-      },
-    );
+      return (
+        matchesBrand &&
+        matchesCategory &&
+        product.isAvailable &&
+        product.salePrice > 0
+      );
+    });
 
     return [...filtered].sort((first, second) => {
       switch (sort) {
@@ -80,37 +64,25 @@ export default function HomePage() {
         case "discount-desc":
         default: {
           const verificationDifference =
-            Number(
-              second.saleVerification === "VERIFIED",
-            ) -
-            Number(
-              first.saleVerification === "VERIFIED",
-            );
+            Number(second.saleVerification === "VERIFIED") -
+            Number(first.saleVerification === "VERIFIED");
 
           if (verificationDifference !== 0) {
             return verificationDifference;
           }
 
           return (
-            (second.discountPercentage ?? 0) -
-            (first.discountPercentage ?? 0)
+            (second.discountPercentage ?? 0) - (first.discountPercentage ?? 0)
           );
         }
       }
     });
-  }, [
-    data,
-    selectedBrands,
-    selectedCategory,
-    sort,
-  ]);
+  }, [data, selectedBrands, selectedCategory, sort]);
 
   function toggleBrand(brand: BrandSlug) {
     setSelectedBrands((currentBrands) =>
       currentBrands.includes(brand)
-        ? currentBrands.filter(
-            (currentBrand) => currentBrand !== brand,
-          )
+        ? currentBrands.filter((currentBrand) => currentBrand !== brand)
         : [...currentBrands, brand],
     );
   }
@@ -157,13 +129,8 @@ export default function HomePage() {
         <div className="mb-9 flex flex-col justify-between gap-5 border-b border-black/10 pb-7 sm:flex-row sm:items-end">
           <div>
             <p className="mb-2 text-xs font-medium tracking-[0.2em] text-black/45 uppercase">
-              {market === "US"
-                ? "United States"
-                : "Korean"}{" "}
-              {gender === "MEN"
-                ? "Menswear"
-                : "Womenswear"}{" "}
-              Sale
+              {market === "US" ? "United States" : "Korean"}{" "}
+              {gender === "MEN" ? "Menswear" : "Womenswear"} Sale
             </p>
 
             <h2 className="text-2xl font-medium md:text-3xl">
@@ -173,8 +140,14 @@ export default function HomePage() {
             <p className="mt-2 text-sm text-black/50">
               {isLoading
                 ? "Loading sale listings..."
-                : `${products.length} sale ${
-                    products.length === 1
+                : `${
+                    selectedBrands.length === 0 && selectedCategory === "all"
+                      ? (data?.total ?? products.length)
+                      : products.length
+                  } sale ${
+                    (selectedBrands.length === 0 && selectedCategory === "all"
+                      ? (data?.total ?? products.length)
+                      : products.length) === 1
                       ? "listing"
                       : "listings"
                   }`}
@@ -188,46 +161,28 @@ export default function HomePage() {
               disabled={isValidating}
               className="h-11 border border-black/15 px-4 text-sm transition hover:bg-black hover:text-white disabled:opacity-40"
             >
-              {isValidating
-                ? "Refreshing..."
-                : "Refresh products"}
+              {isValidating ? "Reloading..." : "Reload catalog"}
             </button>
 
             <select
               value={sort}
-              onChange={(event) =>
-                setSort(
-                  event.target.value as ProductSort,
-                )
-              }
+              onChange={(event) => setSort(event.target.value as ProductSort)}
               aria-label="Sort products"
               className="h-11 min-w-48 border border-black/15 bg-transparent px-3 text-sm outline-none"
             >
-              <option value="discount-desc">
-                Verified sales first
-              </option>
-              <option value="price-asc">
-                Lowest price
-              </option>
-              <option value="price-desc">
-                Highest price
-              </option>
-              <option value="newest">
-                Recently added
-              </option>
+              <option value="discount-desc">Verified sales first</option>
+              <option value="price-asc">Lowest price</option>
+              <option value="price-desc">Highest price</option>
+              <option value="newest">Recently added</option>
             </select>
           </div>
         </div>
 
         {error ? (
           <div className="border border-red-300 bg-red-50 p-6">
-            <p className="font-medium">
-              Unable to retrieve sale listings
-            </p>
+            <p className="font-medium">Unable to retrieve sale listings</p>
 
-            <p className="mt-2 text-sm text-red-700">
-              {error.message}
-            </p>
+            <p className="mt-2 text-sm text-red-700">{error.message}</p>
           </div>
         ) : isLoading ? (
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
