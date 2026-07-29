@@ -315,7 +315,7 @@ export async function extractProductsFromPage({
       "User-Agent":
         process.env.COLLECTOR_USER_AGENT ?? "Mozilla/5.0 CrazySajangnim/1.0",
     },
-    signal: AbortSignal.timeout(18_000),
+    signal: AbortSignal.timeout(25_000),
     cache: "no-store",
   });
 

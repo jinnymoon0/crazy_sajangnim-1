@@ -306,7 +306,7 @@ function createProductId(result: SearxngResult): string {
   return createHash("sha256")
     .update([result.title, result.url, result.engine ?? ""].join("|"))
     .digest("hex")
-    .slice(0, 36);
+    .slice(0, 24);
 }
 
 function normalizeBrandText(value: string): string {
@@ -580,9 +580,9 @@ async function searchBrand(
         !isSecondHandResult(text)
       );
     })
-    .slice(0, 24);
+    .slice(0, 80);
 
-  const pageLimit = pLimit(3);
+  const pageLimit = pLimit(5);
 
   const settledPages = await Promise.allSettled(
     pageCandidates.map((result) =>
@@ -593,7 +593,7 @@ async function searchBrand(
           requestedGender: gender,
           brandSlug: brand.slug,
           brandName: brand.englishName,
-          maxProducts: 50,
+          maxProducts: 150,
         }),
       ),
     ),
@@ -621,24 +621,13 @@ async function searchBrand(
     ).values(),
   );
 
-  const productsBySource = new Map<string, number>();
-
-  const balancedProducts = products
-    .filter((product) => {
-      const currentCount = productsBySource.get(product.sourceName) ?? 0;
-
-      if (currentCount >= 30) {
-        return false;
-      }
-
-      productsBySource.set(product.sourceName, currentCount + 1);
-
-      return true;
-    })
-    .slice(0, 40);
+  /*
+   * Return every validated and deduplicated product.
+   * Accuracy checks still occur before this point.
+   */
 
   return {
-    products: balancedProducts,
+    products,
     rawCount: uniqueResults.length,
     unresponsiveEngines: uniqueEngineErrors,
     error:
