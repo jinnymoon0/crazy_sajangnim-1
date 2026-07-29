@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import BlogComments from "@/components/blog/BlogComments";
 import BlogImageGallery from "@/components/blog/BlogImageGallery";
 import BlogPostManagement from "@/components/blog/BlogPostManagement";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import type { BlogPost } from "@/types/blog";
+import type { BlogComment, BlogPost } from "@/types/blog";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +84,37 @@ async function getBlogPost(id: string): Promise<BlogPost | null> {
   } satisfies BlogPost;
 }
 
+type CommentsResult = {
+  comments: BlogComment[];
+  ready: boolean;
+};
+
+async function getBlogComments(postId: string): Promise<CommentsResult> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("blog_comments")
+    .select("id, post_id, author_name, content, created_at")
+    .eq("post_id", postId)
+    .order("created_at", { ascending: true })
+    .limit(200);
+
+  if (error) {
+    // 42P01 / PGRST205: the table has not been created yet — render
+    // without comments instead of failing the page.
+    if (error.code !== "42P01" && error.code !== "PGRST205") {
+      console.error("Failed to load blog comments:", {
+        code: error.code,
+        message: error.message,
+      });
+    }
+
+    return { comments: [], ready: false };
+  }
+
+  return { comments: (data ?? []) as BlogComment[], ready: true };
+}
+
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { id } = await params;
   const post = await getBlogPost(id);
@@ -90,6 +122,8 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
   if (!post) {
     notFound();
   }
+
+  const { comments, ready: commentsReady } = await getBlogComments(post.id);
 
   return (
     <main className="min-h-screen bg-neutral-100 px-4 py-8 sm:px-6 sm:py-12">
@@ -170,6 +204,12 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             </div>
           </div>
         </article>
+
+        <BlogComments
+          postId={post.id}
+          initialComments={comments}
+          commentsReady={commentsReady}
+        />
       </div>
     </main>
   );

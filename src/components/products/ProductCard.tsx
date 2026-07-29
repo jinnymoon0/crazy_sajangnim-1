@@ -1,8 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { type MouseEvent, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { formatPrice } from "@/lib/utils";
+import {
+  BLOG_SHARE_DRAFT_KEY,
+  type BlogShareDraft,
+} from "@/types/blog";
 import type { Product } from "@/types/product";
 
 interface ProductCardProps {
@@ -10,7 +15,34 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const router = useRouter();
   const [imageFailed, setImageFailed] = useState(false);
+
+  function handleShare(event: MouseEvent<HTMLButtonElement>) {
+    // The card itself is a link to the retailer — keep the click local.
+    event.preventDefault();
+    event.stopPropagation();
+
+    const draft: BlogShareDraft = {
+      brandName: product.brandName,
+      productName: product.productName,
+      salePrice: product.salePrice,
+      originalPrice: product.originalPrice,
+      discountPercentage: product.discountPercentage,
+      currency: product.currency,
+      sourceName: product.sourceName,
+      sourceUrl: product.sourceUrl,
+      imageUrl: imageFailed ? "" : product.imageUrl,
+    };
+
+    try {
+      sessionStorage.setItem(BLOG_SHARE_DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      // Storage unavailable — the form simply starts empty.
+    }
+
+    router.push("/blog");
+  }
 
   const hasVerifiedDiscount =
     product.saleVerification === "VERIFIED" &&
@@ -83,6 +115,14 @@ export function ProductCard({ product }: ProductCardProps) {
           <p className="mt-2 text-[11px] text-black/45">
             Verified from the retailer during the latest catalog refresh
           </p>
+
+          <button
+            type="button"
+            onClick={handleShare}
+            className="mt-3 inline-flex min-h-9 items-center justify-center border border-black/15 px-3 text-xs font-semibold uppercase tracking-[0.08em] transition hover:bg-black hover:text-white"
+          >
+            Share on blog
+          </button>
         </div>
       </article>
     </a>
