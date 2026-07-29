@@ -270,14 +270,14 @@ function getSourceName(result: SearxngResult): string {
   }
 }
 
-function getImageUrl(result: SearxngResult): string | null {
+function getImageUrl(result: SearxngResult): string {
   const image = result.thumbnail?.trim() || result.img_src?.trim();
 
-  if (!image || !/^https?:\/\//i.test(image)) {
-    return null;
+  if (image && /^https?:\/\//i.test(image)) {
+    return image;
   }
 
-  return image;
+  return "/product-placeholder.svg";
 }
 
 function createProductId(result: SearxngResult): string {
@@ -285,6 +285,43 @@ function createProductId(result: SearxngResult): string {
     .update([result.title, result.url, result.engine ?? ""].join("|"))
     .digest("hex")
     .slice(0, 24);
+}
+
+function normalizeBrandText(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resultExplicitlyMatchesBrand(
+  result: SearxngResult,
+  brand: BrandSearch,
+): boolean {
+  const title = normalizeBrandText(result.title ?? "");
+
+  const url = normalizeBrandText(result.url ?? "");
+
+  const englishName = normalizeBrandText(brand.englishName);
+
+  const koreanName = normalizeBrandText(brand.koreanName);
+
+  const slugName = normalizeBrandText(brand.slug.replace(/-/g, " "));
+
+  /*
+   * Require the requested brand in the title or URL.
+   * Do not accept a result merely because its snippet
+   * mentions the brand among many unrelated brands.
+   */
+  return (
+    title.includes(englishName) ||
+    title.includes(koreanName) ||
+    title.includes(slugName) ||
+    url.includes(slugName.replace(/ /g, "")) ||
+    url.includes(englishName.replace(/ /g, ""))
+  );
 }
 
 function normalizeProduct(
@@ -295,6 +332,10 @@ function normalizeProduct(
 ): Product | null {
   const title = result.title.trim();
   const sourceUrl = result.url.trim();
+
+  if (!resultExplicitlyMatchesBrand(result, brand)) {
+    return null;
+  }
   const imageUrl = getImageUrl(result);
   const text = getResultText(result);
 
@@ -347,34 +388,99 @@ function normalizeProduct(
   };
 }
 
+function createSearchQueries(
+  brand: BrandSearch,
+  market: Market,
+  gender: Exclude<Gender, "UNISEX">,
+): string[] {
+  const baseQuery = createQuery(brand, market, gender);
+
+  if (market === "KR") {
+    return [
+      baseQuery,
+      [
+        `("${brand.englishName}" OR "${brand.koreanName}")`,
+        gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)",
+        "(세일 OR 할인 OR 시즌오프 OR 아울렛)",
+        '("판매가" OR "할인가" OR "정가" OR "원")',
+        "-중고",
+        "-리셀",
+      ].join(" "),
+    ];
+  }
+
+  return [
+    baseQuery,
+    [
+      `"${brand.englishName}"`,
+      gender === "MEN" ? "(men OR mens)" : "(women OR womens)",
+      "(sale OR clearance OR discount OR outlet)",
+      '("sale price" OR "regular price" OR "original price" OR "$")',
+      "-used",
+      "-resale",
+      "-preowned",
+    ].join(" "),
+  ];
+}
+
 async function searchBrand(
   brand: BrandSearch,
   market: Market,
   gender: Exclude<Gender, "UNISEX">,
 ): Promise<BrandSearchResult> {
-  try {
-    const response = await searchSearxng(createQuery(brand, market, gender), {
-      language: market === "KR" ? "ko-KR" : "en-US",
-      page: 1,
-    });
+  const collectedResults: SearxngResult[] = [];
+  const unresponsiveEngines: Array<[string, string]> = [];
+  const errors: string[] = [];
 
-    const products = response.results
-      .map((result) => normalizeProduct(result, brand, market, gender))
-      .filter((product): product is Product => product !== null);
+  const queries = createSearchQueries(brand, market, gender);
 
-    return {
-      products,
-      rawCount: response.results.length,
-      unresponsiveEngines: response.unresponsiveEngines,
-    };
-  } catch (error) {
-    return {
-      products: [],
-      rawCount: 0,
-      unresponsiveEngines: [],
-      error: error instanceof Error ? error.message : "Unknown SearXNG error",
-    };
+  /*
+   * Two query variants and two result pages provide
+   * broader coverage than the previous single request.
+   */
+  for (const query of queries) {
+    for (const page of [1, 2]) {
+      try {
+        const response = await searchSearxng(query, {
+          language: market === "KR" ? "ko-KR" : "en-US",
+          page,
+        });
+
+        collectedResults.push(...response.results);
+
+        unresponsiveEngines.push(...response.unresponsiveEngines);
+      } catch (error) {
+        errors.push(
+          error instanceof Error ? error.message : "Unknown SearXNG error",
+        );
+      }
+    }
   }
+
+  const uniqueResults = Array.from(
+    new Map(collectedResults.map((result) => [result.url, result])).values(),
+  );
+
+  const products = uniqueResults
+    .map((result) => normalizeProduct(result, brand, market, gender))
+    .filter((product): product is Product => product !== null);
+
+  const uniqueEngineErrors = Array.from(
+    new Map(
+      unresponsiveEngines.map((engineError) => [
+        engineError.join("|"),
+        engineError,
+      ]),
+    ).values(),
+  );
+
+  return {
+    products,
+    rawCount: uniqueResults.length,
+    unresponsiveEngines: uniqueEngineErrors,
+    error:
+      uniqueResults.length === 0 && errors.length > 0 ? errors[0] : undefined,
+  };
 }
 
 export async function GET(request: NextRequest) {
