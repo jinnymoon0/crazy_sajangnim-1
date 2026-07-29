@@ -410,6 +410,43 @@ function normalizeProduct(
   };
 }
 
+const US_RETAILER_DOMAINS = [
+  "ssense.com",
+  "farfetch.com",
+  "modesens.com",
+  "lyst.com",
+  "endclothing.com",
+  "mrporter.com",
+  "nordstrom.com",
+  "yoox.com",
+  "hbx.com",
+  "shopneighbour.com",
+  "tres-bien.com",
+  "svrn.com",
+];
+
+function createRetailerQuery(
+  brand: BrandSearch,
+  gender: Exclude<Gender, "UNISEX">,
+): string {
+  const genderTerm = gender === "MEN" ? "(men OR mens)" : "(women OR womens)";
+
+  const siteTerms = US_RETAILER_DOMAINS.map((domain) => `site:${domain}`).join(
+    " OR ",
+  );
+
+  return [
+    `(${siteTerms})`,
+    `"${brand.englishName}"`,
+    genderTerm,
+    "(sale OR discount OR clearance)",
+    '("$" OR "sale price" OR "regular price")',
+    "-used",
+    "-resale",
+    "-preowned",
+  ].join(" ");
+}
+
 function createSearchQueries(
   brand: BrandSearch,
   market: Market,
@@ -442,6 +479,7 @@ function createSearchQueries(
 
   return [
     baseQuery,
+    createRetailerQuery(brand, gender),
     [
       `"${brand.englishName}"`,
       gender === "MEN" ? "(men OR mens)" : "(women OR womens)",
@@ -462,6 +500,23 @@ function createSearchQueries(
       "-preowned",
     ].join(" "),
   ];
+}
+
+async function searchAdditionalBrandPage(
+  brand: BrandSearch,
+  market: Market,
+  gender: Exclude<Gender, "UNISEX">,
+): Promise<SearxngResult[]> {
+  try {
+    const response = await searchSearxng(createQuery(brand, market, gender), {
+      language: market === "KR" ? "ko-KR" : "en-US",
+      page: 4,
+    });
+
+    return response.results;
+  } catch {
+    return [];
+  }
 }
 
 async function searchBrand(
@@ -512,7 +567,7 @@ async function searchBrand(
         !isSecondHandResult(text)
       );
     })
-    .slice(0, 18);
+    .slice(0, 24);
 
   const pageLimit = pLimit(3);
 
@@ -553,8 +608,24 @@ async function searchBrand(
     ).values(),
   );
 
+  const productsBySource = new Map<string, number>();
+
+  const balancedProducts = products
+    .filter((product) => {
+      const currentCount = productsBySource.get(product.sourceName) ?? 0;
+
+      if (currentCount >= 8) {
+        return false;
+      }
+
+      productsBySource.set(product.sourceName, currentCount + 1);
+
+      return true;
+    })
+    .slice(0, 20);
+
   return {
-    products,
+    products: balancedProducts,
     rawCount: uniqueResults.length,
     unresponsiveEngines: uniqueEngineErrors,
     error:
