@@ -410,41 +410,35 @@ function normalizeProduct(
   };
 }
 
-const US_RETAILER_DOMAINS = [
-  "ssense.com",
-  "farfetch.com",
-  "modesens.com",
-  "lyst.com",
-  "endclothing.com",
-  "mrporter.com",
-  "nordstrom.com",
-  "yoox.com",
-  "hbx.com",
-  "shopneighbour.com",
-  "tres-bien.com",
-  "svrn.com",
-];
-
-function createRetailerQuery(
+function createRetailerQueries(
   brand: BrandSearch,
   gender: Exclude<Gender, "UNISEX">,
-): string {
+): string[] {
   const genderTerm = gender === "MEN" ? "(men OR mens)" : "(women OR womens)";
 
-  const siteTerms = US_RETAILER_DOMAINS.map((domain) => `site:${domain}`).join(
-    " OR ",
-  );
+  const preferredDomains = [
+    "ssense.com",
+    "farfetch.com",
+    "yoox.com",
+    "modesens.com",
+    "endclothing.com",
+    "shopneighbour.com",
+    "tres-bien.com",
+    "svrn.com",
+  ];
 
-  return [
-    `(${siteTerms})`,
-    `"${brand.englishName}"`,
-    genderTerm,
-    "(sale OR discount OR clearance)",
-    '("$" OR "sale price" OR "regular price")',
-    "-used",
-    "-resale",
-    "-preowned",
-  ].join(" ");
+  return preferredDomains.map((domain) =>
+    [
+      `site:${domain}`,
+      `"${brand.englishName}"`,
+      genderTerm,
+      "(sale OR clearance OR discount)",
+      '("$" OR "sale price" OR "regular price")',
+      "-used",
+      "-resale",
+      "-preowned",
+    ].join(" "),
+  );
 }
 
 function createSearchQueries(
@@ -479,7 +473,7 @@ function createSearchQueries(
 
   return [
     baseQuery,
-    createRetailerQuery(brand, gender),
+    ...createRetailerQueries(brand, gender),
     [
       `"${brand.englishName}"`,
       gender === "MEN" ? "(men OR mens)" : "(women OR womens)",
@@ -530,8 +524,10 @@ async function searchBrand(
 
   const queries = createSearchQueries(brand, market, gender);
 
-  for (const query of queries) {
-    for (const page of [1, 2, 3]) {
+  for (const [queryIndex, query] of queries.entries()) {
+    const pages = queryIndex < 3 ? [1, 2, 3] : [1];
+
+    for (const page of pages) {
       try {
         const response = await searchSearxng(query, {
           language: market === "KR" ? "ko-KR" : "en-US",
@@ -549,13 +545,30 @@ async function searchBrand(
     }
   }
 
-  const uniqueResults = Array.from(
+  let uniqueResults = Array.from(
     new Map(collectedResults.map((result) => [result.url, result])).values(),
   );
 
   const fallbackProducts = uniqueResults
     .map((result) => normalizeProduct(result, brand, market, gender))
     .filter((product): product is Product => product !== null);
+
+  if (uniqueResults.length < 35) {
+    const additionalResults = await searchAdditionalBrandPage(
+      brand,
+      market,
+      gender,
+    );
+
+    uniqueResults = Array.from(
+      new Map(
+        [...uniqueResults, ...additionalResults].map((result) => [
+          result.url,
+          result,
+        ]),
+      ).values(),
+    );
+  }
 
   const pageCandidates = uniqueResults
     .filter((result) => {
@@ -614,7 +627,7 @@ async function searchBrand(
     .filter((product) => {
       const currentCount = productsBySource.get(product.sourceName) ?? 0;
 
-      if (currentCount >= 8) {
+      if (currentCount >= 4) {
         return false;
       }
 
@@ -622,7 +635,7 @@ async function searchBrand(
 
       return true;
     })
-    .slice(0, 20);
+    .slice(0, 28);
 
   return {
     products: balancedProducts,
