@@ -28,6 +28,23 @@ const MEN_KEYWORDS = [
 ];
 
 /*
+ * Garment types that identify womenswear when the listing carries no
+ * explicit gender wording. "dress" must not match dress shirts, dress
+ * pants, or dress shoes.
+ */
+const WOMEN_GARMENT_PATTERNS = [
+  /\bdress(es)?\b(?!\s+(shirt|shirts|pant|pants|shoe|shoes|sock|socks))/,
+  /\bskirts?\b/,
+  /\bblouses?\b/,
+  /\bgowns?\b/,
+  /\bheeled\b/,
+  /\bheels\b/,
+  /원피스/,
+  /스커트/,
+  /블라우스/,
+];
+
+/*
  * Unlike inferGender, a direct catalog crawl has no requested gender to fall
  * back on: the source default may legitimately be UNISEX, which the catalog
  * read path surfaces in both gender segments.
@@ -41,6 +58,10 @@ export function resolveGender(text: string, fallback: Gender): Gender {
 
   if (MEN_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
     return "MEN";
+  }
+
+  if (WOMEN_GARMENT_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return "WOMEN";
   }
 
   return fallback;
