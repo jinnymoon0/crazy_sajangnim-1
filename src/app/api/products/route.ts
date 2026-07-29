@@ -441,6 +441,99 @@ function createRetailerQueries(
   );
 }
 
+function createDirectRetailerQueries(
+  brand: BrandSearch,
+  gender: Exclude<Gender, "UNISEX">,
+): string[] {
+  const genderTerms = gender === "MEN" ? "(men OR mens)" : "(women OR womens)";
+
+  const domains = [
+    "lyst.com",
+    "lyst.co.uk",
+    "farfetch.com",
+    "ssense.com",
+    "endclothing.com",
+    "yoox.com",
+    "modesens.com",
+    "hbx.com",
+    "mrporter.com",
+    "shopneighbour.com",
+    "svrn.com",
+    "tres-bien.com",
+    "italist.com",
+    "cettire.com",
+    "giglio.com",
+    "vitkac.com",
+  ];
+
+  return domains.map((domain) =>
+    [
+      `site:${domain}`,
+      `"${brand.englishName}"`,
+      genderTerms,
+      "(sale OR discount OR clearance OR markdown)",
+      "-used",
+      "-resale",
+      "-preowned",
+    ].join(" "),
+  );
+}
+
+function createCategoryQueries(
+  brand: BrandSearch,
+  market: Market,
+  gender: Exclude<Gender, "UNISEX">,
+): string[] {
+  if (market === "KR") {
+    const genderTerms =
+      gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)";
+
+    const categories = [
+      "자켓 코트",
+      "셔츠 티셔츠",
+      "니트 스웨터 가디건",
+      "팬츠 데님",
+      "신발 스니커즈",
+      "가방 액세서리",
+    ];
+
+    return categories.map((category) =>
+      [
+        `("${brand.englishName}" OR "${brand.koreanName}")`,
+        genderTerms,
+        `(${category})`,
+        "(세일 OR 할인 OR 시즌오프 OR 아울렛)",
+        "-중고",
+        "-리셀",
+      ].join(" "),
+    );
+  }
+
+  const genderTerms = gender === "MEN" ? "(men OR mens)" : "(women OR womens)";
+
+  const categories = [
+    "(jacket OR coat OR blazer)",
+    "(shirt OR t-shirt OR polo)",
+    "(sweater OR knitwear OR cardigan)",
+    "(pants OR trousers OR jeans)",
+    "(shoes OR sneakers OR boots)",
+    "(bag OR hat OR accessories)",
+  ];
+
+  return categories.map((category) =>
+    [
+      `"${brand.englishName}"`,
+      genderTerms,
+      category,
+      "(sale OR clearance OR discount OR markdown)",
+      '("$" OR "sale price" OR "regular price")',
+      "-used",
+      "-resale",
+      "-preowned",
+    ].join(" "),
+  );
+}
+
 function createSearchQueries(
   brand: BrandSearch,
   market: Market,
@@ -451,6 +544,7 @@ function createSearchQueries(
   if (market === "KR") {
     return [
       baseQuery,
+      ...createCategoryQueries(brand, market, gender),
       [
         `("${brand.englishName}" OR "${brand.koreanName}")`,
         gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)",
@@ -473,6 +567,8 @@ function createSearchQueries(
 
   return [
     baseQuery,
+    ...createCategoryQueries(brand, market, gender),
+    ...createDirectRetailerQueries(brand, gender),
     ...createRetailerQueries(brand, gender),
     [
       `"${brand.englishName}"`,
@@ -525,7 +621,7 @@ async function searchBrand(
   const queries = createSearchQueries(brand, market, gender);
 
   for (const [queryIndex, query] of queries.entries()) {
-    const pages = queryIndex < 3 ? [1, 2, 3] : [1];
+    const pages = queryIndex < 7 ? [1, 2, 3, 4, 5, 6, 7, 8] : [1, 2];
 
     for (const page of pages) {
       try {
@@ -570,19 +666,17 @@ async function searchBrand(
     );
   }
 
-  const pageCandidates = uniqueResults
-    .filter((result) => {
-      const text = getResultText(result);
+  const pageCandidates = uniqueResults.filter((result) => {
+    const text = getResultText(result);
 
-      return (
-        resultExplicitlyMatchesBrand(result, brand) &&
-        containsSaleTerm(text) &&
-        !isSecondHandResult(text)
-      );
-    })
-    .slice(0, 80);
+    return (
+      resultExplicitlyMatchesBrand(result, brand) &&
+      containsSaleTerm(text) &&
+      !isSecondHandResult(text)
+    );
+  });
 
-  const pageLimit = pLimit(5);
+  const pageLimit = pLimit(8);
 
   const settledPages = await Promise.allSettled(
     pageCandidates.map((result) =>
