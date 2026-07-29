@@ -428,6 +428,15 @@ function createSearchQueries(
         "-중고",
         "-리셀",
       ].join(" "),
+      [
+        `("${brand.englishName}" OR "${brand.koreanName}")`,
+        gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)",
+        '("판매가" OR "할인가")',
+        "(자켓 OR 셔츠 OR 팬츠 OR 니트 OR 신발 OR 가방)",
+        "-컬렉션",
+        "-중고",
+        "-리셀",
+      ].join(" "),
     ];
   }
 
@@ -438,6 +447,16 @@ function createSearchQueries(
       gender === "MEN" ? "(men OR mens)" : "(women OR womens)",
       "(sale OR clearance OR discount OR outlet)",
       '("sale price" OR "regular price" OR "original price" OR "$")',
+      "-used",
+      "-resale",
+      "-preowned",
+    ].join(" "),
+    [
+      `"${brand.englishName}"`,
+      gender === "MEN" ? "(men OR mens)" : "(women OR womens)",
+      '("sale price" OR "regular price")',
+      "(jacket OR shirt OR pants OR sweater OR shoes OR bag)",
+      "-collection",
       "-used",
       "-resale",
       "-preowned",
@@ -457,7 +476,7 @@ async function searchBrand(
   const queries = createSearchQueries(brand, market, gender);
 
   for (const query of queries) {
-    for (const page of [1, 2]) {
+    for (const page of [1, 2, 3]) {
       try {
         const response = await searchSearxng(query, {
           language: market === "KR" ? "ko-KR" : "en-US",
@@ -493,7 +512,7 @@ async function searchBrand(
         !isSecondHandResult(text)
       );
     })
-    .slice(0, 10);
+    .slice(0, 18);
 
   const pageLimit = pLimit(3);
 
@@ -506,7 +525,7 @@ async function searchBrand(
           requestedGender: gender,
           brandSlug: brand.slug,
           brandName: brand.englishName,
-          maxProducts: 15,
+          maxProducts: 30,
         }),
       ),
     ),
