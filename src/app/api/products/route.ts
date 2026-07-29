@@ -531,7 +531,13 @@ function normalizeProduct(
 
     discountPercentage: verifiedPrices?.discountPercentage ?? null,
 
-    saleVerification: verifiedPrices ? "VERIFIED" : "UNVERIFIED",
+    /*
+     * Snippet-derived pairs take the lowest and highest prices mentioned in
+     * a search result, which routinely mixes unrelated products. Treat every
+     * snippet price as an estimate; only page-level structured data or a
+     * direct retailer feed may produce VERIFIED prices.
+     */
+    saleVerification: "UNVERIFIED",
 
     isAvailable: true,
     collectedAt: new Date().toISOString(),

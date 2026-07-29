@@ -26,6 +26,7 @@ interface GarmentoryItem {
   retailPrice?: string;
   price?: string;
   isDiscounted?: boolean;
+  hasVaryingPrices?: boolean;
   store?: string;
   mainImage?: {
     largeUrl?: string;
@@ -47,6 +48,15 @@ function normalizeItem(item: GarmentoryItem): Product | null {
   const path = item.path?.trim();
 
   if (!name || !path || item.active === false || !item.isDiscounted) {
+    return null;
+  }
+
+  /*
+   * When the price differs per size, the listing price does not match what
+   * the product page shows for every option — skip to avoid apparent
+   * price errors.
+   */
+  if (item.hasVaryingPrices) {
     return null;
   }
 

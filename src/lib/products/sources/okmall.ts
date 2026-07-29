@@ -68,15 +68,17 @@ function parseListPage(html: string): Product[] {
 
     /*
      * OK Mall lists a struck-through original price (.orgin_price) next to
-     * the active sale price (.sale_price / .okmall_price).
+     * the selling price. Use .okmall_price — the price the product page
+     * itself displays. .sale_price is a coupon/membership price that does
+     * not match the page, which read as a price error to visitors.
      */
     const originalPrice = parseKrwAmount(
       card.find(".orgin_price").first().text(),
     );
 
     const salePrice =
-      parseKrwAmount(card.find(".sale_price").first().text()) ??
-      parseKrwAmount(card.find(".okmall_price").first().text());
+      parseKrwAmount(card.find(".okmall_price").first().text()) ??
+      parseKrwAmount(card.find(".sale_price").first().text());
 
     if (
       !originalPrice ||

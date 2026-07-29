@@ -219,106 +219,6 @@ function resolvePrices(product: JsonLdProduct): {
   };
 }
 
-function collectHtmlPrices($: cheerio.CheerioAPI, html: string): number[] {
-  const values: number[] = [];
-
-  const selectors = [
-    'meta[property="product:price:amount"]',
-    'meta[property="og:price:amount"]',
-    'meta[name="twitter:data1"]',
-    'meta[itemprop="price"]',
-    '[itemprop="price"]',
-    "[data-price]",
-    "[data-sale-price]",
-    "[data-current-price]",
-    "[data-original-price]",
-    "[data-regular-price]",
-    "[data-was-price]",
-  ];
-
-  for (const selector of selectors) {
-    $(selector).each((_, element) => {
-      const node = $(element);
-
-      const candidates = [
-        node.attr("content"),
-        node.attr("value"),
-        node.attr("data-price"),
-        node.attr("data-sale-price"),
-        node.attr("data-current-price"),
-        node.attr("data-original-price"),
-        node.attr("data-regular-price"),
-        node.attr("data-was-price"),
-        node.text(),
-      ];
-
-      for (const candidate of candidates) {
-        const value = parseNumber(candidate);
-
-        if (value) {
-          values.push(value);
-        }
-      }
-    });
-  }
-
-  const patterns = [
-    /"(?:salePrice|sale_price|currentPrice|current_price|finalPrice|final_price)"\s*:\s*"?([\d,.]+)"?/gi,
-    /"(?:regularPrice|regular_price|originalPrice|original_price|listPrice|list_price|wasPrice|was_price)"\s*:\s*"?([\d,.]+)"?/gi,
-    /"(?:price|lowPrice|highPrice)"\s*:\s*"?([\d,.]+)"?/gi,
-    /(?:US\$|\$)\s*([\d,]+(?:\.\d{1,2})?)/g,
-    /(?:₩|KRW)\s*([\d,]+)/gi,
-    /([\d,]{4,})\s*원/g,
-  ];
-
-  for (const pattern of patterns) {
-    for (const match of html.matchAll(pattern)) {
-      const value = parseNumber(match[1]);
-
-      if (value) {
-        values.push(value);
-      }
-    }
-  }
-
-  return Array.from(
-    new Set(
-      values
-        .filter(
-          (value) =>
-            Number.isFinite(value) && value > 0 && value < 1_000_000_000,
-        )
-        .map((value) => Math.round(value * 100) / 100),
-    ),
-  ).sort((first, second) => first - second);
-}
-
-function resolveHtmlPrices(
-  $: cheerio.CheerioAPI,
-  html: string,
-): {
-  salePrice: number;
-  originalPrice: number;
-} | null {
-  const prices = collectHtmlPrices($, html);
-
-  if (prices.length < 2) {
-    return null;
-  }
-
-  const salePrice = prices[0];
-  const originalPrice = prices[prices.length - 1];
-
-  if (!salePrice || !originalPrice || originalPrice <= salePrice) {
-    return null;
-  }
-
-  return {
-    salePrice,
-    originalPrice,
-  };
-}
-
 function absoluteUrl(
   value: string | undefined,
   baseUrl: string,
@@ -499,7 +399,13 @@ export async function extractProductsFromPage({
       continue;
     }
 
-    const prices = resolvePrices(jsonProduct) ?? resolveHtmlPrices($, html);
+    /*
+     * Only trust a sale/original pair published inside this product's own
+     * JSON-LD offers. The previous page-wide fallback paired the smallest
+     * and largest prices found anywhere on the page, which fabricated
+     * identical, wildly wrong pairs for every product on a listing.
+     */
+    const prices = resolvePrices(jsonProduct);
 
     if (!prices) {
       continue;
