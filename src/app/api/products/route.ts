@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
+import pLimit from "p-limit";
 import { NextRequest, NextResponse } from "next/server";
 
 import type { BrandSlug } from "@/constants/brands";
 import { inferBrand } from "@/lib/products/infer-brand";
 import { inferCategory } from "@/lib/products/infer-category";
 import { inferGender } from "@/lib/products/infer-gender";
+import { extractProductsFromPage } from "@/lib/products/extract-products-from-page";
 import { searchSearxng, type SearxngResult } from "@/lib/search/searxng";
 import { calculateDiscountPercentage } from "@/lib/utils";
 import type { Gender, Market, Product } from "@/types/product";
@@ -270,14 +272,34 @@ function getSourceName(result: SearxngResult): string {
   }
 }
 
-function getImageUrl(result: SearxngResult): string {
+const NON_PRODUCT_IMAGE_TERMS = [
+  "logo",
+  "favicon",
+  "wordmark",
+  "brandmark",
+  "sprite",
+  "avatar",
+  "banner",
+  "header",
+  "placeholder",
+  "default-image",
+  "no-image",
+];
+
+function getImageUrl(result: SearxngResult): string | null {
   const image = result.thumbnail?.trim() || result.img_src?.trim();
 
-  if (image && /^https?:\/\//i.test(image)) {
-    return image;
+  if (!image || !/^https?:\/\//i.test(image)) {
+    return null;
   }
 
-  return "/product-placeholder.svg";
+  const normalizedImage = image.toLowerCase();
+
+  if (NON_PRODUCT_IMAGE_TERMS.some((term) => normalizedImage.includes(term))) {
+    return null;
+  }
+
+  return image;
 }
 
 function createProductId(result: SearxngResult): string {
@@ -434,10 +456,6 @@ async function searchBrand(
 
   const queries = createSearchQueries(brand, market, gender);
 
-  /*
-   * Two query variants and two result pages provide
-   * broader coverage than the previous single request.
-   */
   for (const query of queries) {
     for (const page of [1, 2]) {
       try {
@@ -461,9 +479,51 @@ async function searchBrand(
     new Map(collectedResults.map((result) => [result.url, result])).values(),
   );
 
-  const products = uniqueResults
+  const fallbackProducts = uniqueResults
     .map((result) => normalizeProduct(result, brand, market, gender))
     .filter((product): product is Product => product !== null);
+
+  const pageCandidates = uniqueResults
+    .filter((result) => {
+      const text = getResultText(result);
+
+      return (
+        resultExplicitlyMatchesBrand(result, brand) &&
+        containsSaleTerm(text) &&
+        !isSecondHandResult(text)
+      );
+    })
+    .slice(0, 10);
+
+  const pageLimit = pLimit(3);
+
+  const settledPages = await Promise.allSettled(
+    pageCandidates.map((result) =>
+      pageLimit(() =>
+        extractProductsFromPage({
+          pageUrl: result.url,
+          market,
+          requestedGender: gender,
+          brandSlug: brand.slug,
+          brandName: brand.englishName,
+          maxProducts: 15,
+        }),
+      ),
+    ),
+  );
+
+  const extractedProducts = settledPages.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : [],
+  );
+
+  const products = Array.from(
+    new Map(
+      [...extractedProducts, ...fallbackProducts].map((product) => [
+        [product.sourceUrl, product.productName, product.salePrice].join("|"),
+        product,
+      ]),
+    ).values(),
+  );
 
   const uniqueEngineErrors = Array.from(
     new Map(
@@ -507,8 +567,10 @@ export async function GET(request: NextRequest) {
     ? genderParameter
     : "MEN";
 
+  const brandLimit = pLimit(2);
+
   const results = await Promise.all(
-    BRANDS.map((brand) => searchBrand(brand, market, gender)),
+    BRANDS.map((brand) => brandLimit(() => searchBrand(brand, market, gender))),
   );
 
   const allProducts = results.flatMap((result) => result.products);
