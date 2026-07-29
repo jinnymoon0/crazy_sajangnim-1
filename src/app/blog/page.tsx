@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import BlogFeed from "@/components/blog/BlogFeed";
 import BlogPostForm from "@/components/blog/BlogPostForm";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -35,19 +37,31 @@ export default async function BlogPage() {
   return (
     <main className="min-h-screen bg-neutral-100">
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <header className="mb-10 max-w-3xl">
-          <p className="text-sm font-bold uppercase tracking-[0.25em] text-neutral-500">
-            Crazy Sajangnim
-          </p>
+        <header className="mb-10">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-sm font-bold uppercase tracking-[0.25em] text-neutral-500">
+                Crazy Sajangnim
+              </p>
 
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-neutral-950 sm:text-5xl">
-            Clothing Blog
-          </h1>
+              <h1 className="mt-3 text-4xl font-black tracking-tight text-neutral-950 sm:text-5xl">
+                Clothing Blog
+              </h1>
 
-          <p className="mt-4 text-base leading-7 text-neutral-600">
-            Share clothing finds, styling ideas, reviews, and sale
-            discoveries without creating an account.
-          </p>
+              <p className="mt-4 text-base leading-7 text-neutral-600">
+                Share clothing finds, styling ideas, reviews, and sale
+                discoveries without creating an account.
+              </p>
+            </div>
+
+            <Link
+              href="/"
+              className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full bg-neutral-950 px-5 py-3 text-sm font-bold !text-white transition hover:bg-neutral-700 hover:!text-white focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
+            >
+              <span aria-hidden="true">←</span>
+              Back to shopping
+            </Link>
+          </div>
         </header>
 
         <div className="grid items-start gap-10 lg:grid-cols-[380px_minmax(0,1fr)]">

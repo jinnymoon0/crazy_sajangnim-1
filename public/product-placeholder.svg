@@ -1,0 +1,47 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 800 1000"
+  role="img"
+  aria-labelledby="title description"
+>
+  <title id="title">Product image unavailable</title>
+  <desc id="description">
+    Neutral placeholder for a product without an available image
+  </desc>
+
+  <rect width="800" height="1000" fill="#e7e3da" />
+
+  <g fill="#111111" text-anchor="middle">
+    <text
+      x="400"
+      y="470"
+      font-family="Arial, Helvetica, sans-serif"
+      font-size="42"
+      font-weight="700"
+      letter-spacing="8"
+    >
+      CRAZY
+    </text>
+
+    <text
+      x="400"
+      y="530"
+      font-family="Arial, Helvetica, sans-serif"
+      font-size="42"
+      font-weight="700"
+      letter-spacing="8"
+    >
+      SAJANGNIM
+    </text>
+
+    <text
+      x="400"
+      y="600"
+      font-family="Arial, Helvetica, sans-serif"
+      font-size="22"
+      opacity="0.5"
+    >
+      IMAGE UNAVAILABLE
+    </text>
+  </g>
+</svg>

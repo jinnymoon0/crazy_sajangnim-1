@@ -42,3 +42,8 @@ next-env.d.ts
 
 # JetBrains IDE files
 .idea/
+
+# Local retailer parser diagnostics
+retailer-samples/
+retailer-html-analysis.txt
+retailer-parser-markers.txt

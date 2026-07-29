@@ -26,7 +26,6 @@ type BlogPostRow = {
   created_at: string;
 };
 
-
 function formatPostDate(dateValue: string): string {
   return new Intl.DateTimeFormat("en-US", {
     year: "numeric",
@@ -84,9 +83,7 @@ async function getBlogPost(id: string): Promise<BlogPost | null> {
   } satisfies BlogPost;
 }
 
-export default async function BlogPostPage({
-  params,
-}: BlogPostPageProps) {
+export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { id } = await params;
   const post = await getBlogPost(id);
 
@@ -97,13 +94,32 @@ export default async function BlogPostPage({
   return (
     <main className="min-h-screen bg-neutral-100 px-4 py-8 sm:px-6 sm:py-12">
       <div className="mx-auto max-w-6xl">
-        <Link
-          href="/blog"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-neutral-600 transition hover:text-neutral-950"
+        <nav
+          aria-label="Blog navigation"
+          className="flex flex-wrap items-center gap-3"
         >
-          <span aria-hidden="true">←</span>
-          Back to clothing blog
-        </Link>
+          <Link
+            href="/blog"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-neutral-600 transition hover:text-neutral-950"
+          >
+            <span aria-hidden="true">←</span>
+            Back to clothing blog
+          </Link>
+
+          <span
+            aria-hidden="true"
+            className="hidden text-neutral-300 sm:inline"
+          >
+            |
+          </span>
+
+          <Link
+            href="/"
+            className="inline-flex items-center rounded-full bg-neutral-950 px-4 py-2 text-sm font-bold text-white transition hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
+          >
+            Go to shopping
+          </Link>
+        </nav>
 
         <article className="mt-6 overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm">
           <div className="grid items-start lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
