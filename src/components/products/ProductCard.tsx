@@ -12,14 +12,7 @@ interface ProductCardProps {
 export function ProductCard({ product }: ProductCardProps) {
   const [imageFailed, setImageFailed] = useState(false);
 
-  /*
-   * Existing catalog rows may still be marked VERIFIED,
-   * so detect Lyst by source name as well.
-   */
-  const isLystProduct = product.sourceName.toLowerCase().includes("lyst");
-
-  const isVerified =
-    !isLystProduct &&
+  const hasVerifiedDiscount =
     product.saleVerification === "VERIFIED" &&
     product.originalPrice !== null &&
     product.discountPercentage !== null;
@@ -53,9 +46,11 @@ export function ProductCard({ product }: ProductCardProps) {
             </div>
           )}
 
-          <span className="absolute left-3 top-3 bg-[#d8432e] px-2.5 py-1 text-xs font-semibold text-white">
-            {isVerified ? `${product.discountPercentage}% OFF` : "SALE"}
-          </span>
+          {hasVerifiedDiscount && (
+            <span className="absolute left-3 top-3 bg-[#d8432e] px-2.5 py-1 text-xs font-semibold text-white">
+              {product.discountPercentage}% OFF
+            </span>
+          )}
         </div>
 
         <div className="pt-4">
@@ -73,38 +68,21 @@ export function ProductCard({ product }: ProductCardProps) {
             {product.productName}
           </h3>
 
-          {isLystProduct ? (
-            <div className="mt-3">
-              <span className="inline-flex border border-black px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] transition group-hover:bg-black group-hover:text-white">
-                Check current price
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-[#c83d29]">
+              {formatPrice(product.salePrice, product.currency)}
+            </span>
+
+            {product.originalPrice !== null && (
+              <span className="text-xs text-black/40 line-through">
+                {formatPrice(product.originalPrice, product.currency)}
               </span>
+            )}
+          </div>
 
-              <p className="mt-2 text-[11px] leading-4 text-black/45">
-                The final retailer price may vary by region, availability, and
-                current promotion.
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold text-[#c83d29]">
-                  {formatPrice(product.salePrice, product.currency)}
-                </span>
-
-                {product.originalPrice !== null && (
-                  <span className="text-xs text-black/40 line-through">
-                    {formatPrice(product.originalPrice, product.currency)}
-                  </span>
-                )}
-              </div>
-
-              {!isVerified && (
-                <p className="mt-2 text-[11px] text-black/45">
-                  Current price should be confirmed on the retailer website
-                </p>
-              )}
-            </>
-          )}
+          <p className="mt-2 text-[11px] text-black/45">
+            Verified from the retailer during the latest catalog refresh
+          </p>
         </div>
       </article>
     </a>

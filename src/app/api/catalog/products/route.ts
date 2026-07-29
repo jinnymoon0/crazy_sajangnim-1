@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     const page = parsePositiveInteger(parameters.get("page"), 1);
 
     const size = Math.min(
-      100,
+      300,
       parsePositiveInteger(parameters.get("size"), 60),
     );
 

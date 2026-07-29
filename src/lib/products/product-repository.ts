@@ -191,7 +191,7 @@ export async function getProductsPage({
   const supabase = getSupabaseAdmin();
 
   const safePage = Math.max(1, page);
-  const safeSize = Math.min(100, Math.max(1, size));
+  const safeSize = Math.min(300, Math.max(1, size));
 
   const start = (safePage - 1) * safeSize;
 
@@ -227,7 +227,8 @@ export async function getProductsPage({
     )
     .eq("market", market)
     .in("gender", [gender, "UNISEX"])
-    .eq("is_available", true);
+    .eq("is_available", true)
+    .eq("sale_verification", "VERIFIED");
 
   if (brandSlugs.length > 0) {
     query = query.in("brand_slug", brandSlugs);
@@ -308,7 +309,8 @@ export async function getCatalogCount(
     })
     .eq("market", market)
     .in("gender", [gender, "UNISEX"])
-    .eq("is_available", true);
+    .eq("is_available", true)
+    .eq("sale_verification", "VERIFIED");
 
   if (error) {
     throw new Error(`Unable to count products: ${error.message}`);

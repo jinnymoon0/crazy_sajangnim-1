@@ -441,7 +441,33 @@ export async function extractProductsFromPage({
 
   products.push(...retailerProducts);
 
-  if (products.length >= maxProducts) {
+  let retailerHostname = "";
+
+  try {
+    retailerHostname = new URL(pageUrl).hostname
+      .toLowerCase()
+      .replace(/^www\./, "");
+  } catch {
+    retailerHostname = "";
+  }
+
+  const hasDedicatedAdapter =
+    retailerHostname === "lyst.com" ||
+    retailerHostname.endsWith(".lyst.com") ||
+    retailerHostname === "lyst.co.uk" ||
+    retailerHostname.endsWith(".lyst.co.uk") ||
+    retailerHostname === "8division.com" ||
+    retailerHostname.endsWith(".8division.com") ||
+    retailerHostname === "sculpstore.com" ||
+    retailerHostname.endsWith(".sculpstore.com");
+
+  /*
+   * A dedicated retailer adapter is authoritative.
+   * Do not run generic JSON-LD extraction afterward,
+   * because it may assign the selected market currency
+   * to a price that is actually denominated in EUR.
+   */
+  if (hasDedicatedAdapter || products.length >= maxProducts) {
     return products.slice(0, maxProducts);
   }
 

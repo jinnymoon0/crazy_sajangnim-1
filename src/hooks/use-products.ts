@@ -43,7 +43,7 @@ export function useProducts(market: Market, gender: Exclude<Gender, "UNISEX">) {
     market,
     gender,
     page: "1",
-    size: "100",
+    size: "300",
     sort: "discount-desc",
   });
 
