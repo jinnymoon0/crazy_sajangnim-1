@@ -306,7 +306,7 @@ function createProductId(result: SearxngResult): string {
   return createHash("sha256")
     .update([result.title, result.url, result.engine ?? ""].join("|"))
     .digest("hex")
-    .slice(0, 24);
+    .slice(0, 36);
 }
 
 function normalizeBrandText(value: string): string {
@@ -593,7 +593,7 @@ async function searchBrand(
           requestedGender: gender,
           brandSlug: brand.slug,
           brandName: brand.englishName,
-          maxProducts: 30,
+          maxProducts: 50,
         }),
       ),
     ),
@@ -627,7 +627,7 @@ async function searchBrand(
     .filter((product) => {
       const currentCount = productsBySource.get(product.sourceName) ?? 0;
 
-      if (currentCount >= 4) {
+      if (currentCount >= 30) {
         return false;
       }
 
@@ -635,7 +635,7 @@ async function searchBrand(
 
       return true;
     })
-    .slice(0, 28);
+    .slice(0, 40);
 
   return {
     products: balancedProducts,
