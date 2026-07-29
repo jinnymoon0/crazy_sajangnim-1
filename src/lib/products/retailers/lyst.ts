@@ -135,9 +135,18 @@ export const parseLystProducts: RetailerAdapter = ({
       return;
     }
 
+    /*
+     * Keep the exact offer URL tied to the price
+     * displayed on the Lyst product card.
+     */
+    const offerHref = card
+      .find('a[data-testid="product-card-lead-link"]')
+      .first()
+      .attr("href");
+
     const productHref = card.find('a[href^="/clothing/"]').first().attr("href");
 
-    const sourceUrl = getAbsoluteUrl(productHref, pageUrl);
+    const sourceUrl = getAbsoluteUrl(offerHref ?? productHref, pageUrl);
 
     if (!sourceUrl) {
       return;
@@ -187,7 +196,11 @@ export const parseLystProducts: RetailerAdapter = ({
       originalPrice,
       salePrice,
       discountPercentage,
-      saleVerification: "VERIFIED",
+      /*
+       * Lyst prices are discovery snapshots. The destination
+       * retailer may show a different regional or current price.
+       */
+      saleVerification: "UNVERIFIED",
 
       isAvailable: true,
       collectedAt: new Date().toISOString(),
