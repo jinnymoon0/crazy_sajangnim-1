@@ -1,6 +1,8 @@
 "use client";
 
 import { Menu } from "lucide-react";
+
+import AccountMenu from "@/components/auth/AccountMenu";
 import type { Gender, Market } from "@/types/product";
 
 interface HeaderProps {
@@ -36,7 +38,9 @@ export function Header({
           Crazy Sajangnim
         </h1>
 
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-2 md:gap-3">
+          <AccountMenu />
+
           <div className="flex rounded-full border border-black/15 bg-white p-1">
             <button
               type="button"
