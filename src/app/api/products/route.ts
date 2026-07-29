@@ -1,62 +1,16 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { calculateDiscountPercentage } from "@/lib/utils";
+
+import type { BrandSlug } from "@/constants/brands";
+import { inferBrand } from "@/lib/products/infer-brand";
 import { inferCategory } from "@/lib/products/infer-category";
 import { inferGender } from "@/lib/products/infer-gender";
-import { inferBrand } from "@/lib/products/infer-brand";
-import type {
-  BrandSlug,
-} from "@/constants/brands";
-import type {
-  Gender,
-  Market,
-  Product,
-} from "@/types/product";
+import { searchSearxng, type SearxngResult } from "@/lib/search/searxng";
+import { calculateDiscountPercentage } from "@/lib/utils";
+import type { Gender, Market, Product } from "@/types/product";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-interface ShoppingResult {
-  title?: string;
-  product_id?: string;
-
-  link?: string;
-  product_link?: string;
-
-  source?: string;
-
-  price?: string;
-  extracted_price?: number;
-
-  old_price?: string;
-  extracted_old_price?: number;
-
-  thumbnail?: string;
-  serpapi_thumbnail?: string;
-
-  tag?: string;
-  badge?: string;
-  extensions?: string[];
-
-  second_hand_condition?: string;
-}
-
-interface CategorizedShoppingResult {
-  shopping_results?: ShoppingResult[];
-}
-
-interface SerpApiResponse {
-  shopping_results?: ShoppingResult[];
-  inline_shopping_results?: ShoppingResult[];
-
-  categorized_shopping_results?: CategorizedShoppingResult[];
-
-  serpapi_pagination?: {
-    next?: string;
-  };
-
-  error?: string;
-}
 
 interface BrandSearch {
   slug: BrandSlug;
@@ -64,16 +18,17 @@ interface BrandSearch {
   koreanName: string;
 }
 
-interface SearchPageResult {
-  results: ShoppingResult[];
-  nextUrl?: string;
-  error?: string;
-}
-
 interface BrandSearchResult {
   products: Product[];
   rawCount: number;
+  unresponsiveEngines: Array<[string, string]>;
   error?: string;
+}
+
+interface ParsedPrices {
+  salePrice: number;
+  originalPrice: number;
+  discountPercentage: number;
 }
 
 const BRANDS: BrandSearch[] = [
@@ -119,9 +74,38 @@ const BRANDS: BrandSearch[] = [
   },
 ];
 
-function isMarket(
-  value: string | null,
-): value is Market {
+const SECOND_HAND_TERMS = [
+  "used",
+  "pre-owned",
+  "preowned",
+  "second hand",
+  "second-hand",
+  "resale",
+  "poshmark",
+  "therealreal",
+  "grailed",
+  "ebay",
+  "중고",
+  "리셀",
+  "번개장터",
+  "당근",
+];
+
+const SALE_TERMS = [
+  "sale",
+  "clearance",
+  "discount",
+  "off",
+  "outlet",
+  "markdown",
+  "세일",
+  "할인",
+  "시즌오프",
+  "아울렛",
+  "특가",
+];
+
+function isMarket(value: string | null): value is Market {
   return value === "US" || value === "KR";
 }
 
@@ -131,56 +115,73 @@ function isRequestedGender(
   return value === "MEN" || value === "WOMEN";
 }
 
-function parsePrice(
-  value?: string,
-): number | null {
-  if (!value) {
-    return null;
+function createQuery(
+  brand: BrandSearch,
+  market: Market,
+  gender: Exclude<Gender, "UNISEX">,
+): string {
+  if (market === "KR") {
+    const genderTerms =
+      gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)";
+
+    return [
+      `("${brand.englishName}" OR "${brand.koreanName}")`,
+      genderTerms,
+      "(세일 OR 할인 OR 시즌오프 OR 아울렛)",
+      "(의류 OR 자켓 OR 팬츠 OR 셔츠 OR 니트 OR 신발 OR 가방)",
+      "-중고",
+      "-리셀",
+    ].join(" ");
   }
 
-  const normalized = value
-    .replace(/,/g, "")
-    .replace(/[^\d.]/g, "");
+  const genderTerms = gender === "MEN" ? "(men OR mens)" : "(women OR womens)";
 
-  const result = Number.parseFloat(normalized);
-
-  return Number.isFinite(result)
-    ? result
-    : null;
+  return [
+    `"${brand.englishName}"`,
+    genderTerms,
+    "(sale OR clearance OR discount OR outlet)",
+    "(clothing OR jacket OR pants OR shirt OR knitwear OR shoes OR bag)",
+    "-used",
+    "-resale",
+    "-preowned",
+  ].join(" ");
 }
 
-function getDiscountFromText(
-  result: ShoppingResult,
-): number | null {
-  const values = [
-    result.tag,
-    result.badge,
-    ...(result.extensions ?? []),
-  ].filter(
-    (value): value is string =>
-      Boolean(value),
-  );
+function getResultText(result: SearxngResult): string {
+  return [result.title, result.content, result.url]
+    .filter((value): value is string => Boolean(value))
+    .join(" ");
+}
 
-  for (const value of values) {
-    const match =
-      value.match(
-        /(\d{1,2})\s*%\s*(?:off|할인)?/i,
-      ) ??
-      value.match(
-        /(?:할인율\s*)?(\d{1,2})\s*%/i,
-      );
+function containsSaleTerm(text: string): boolean {
+  const normalized = text.toLowerCase();
+
+  return SALE_TERMS.some((term) => normalized.includes(term));
+}
+
+function isSecondHandResult(text: string): boolean {
+  const normalized = text.toLowerCase();
+
+  return SECOND_HAND_TERMS.some((term) => normalized.includes(term));
+}
+
+function extractDiscountPercentage(text: string): number | null {
+  const patterns = [
+    /(\d{1,2})\s*%\s*(?:off|discount|할인)/i,
+    /(?:up to|최대)\s*(\d{1,2})\s*%/i,
+    /(?:할인율\s*)?(\d{1,2})\s*%/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
 
     if (!match) {
       continue;
     }
 
-    const percentage =
-      Number.parseInt(match[1], 10);
+    const percentage = Number.parseInt(match[1], 10);
 
-    if (
-      percentage > 0 &&
-      percentage < 100
-    ) {
+    if (percentage > 0 && percentage < 100) {
       return percentage;
     }
   }
@@ -188,446 +189,199 @@ function getDiscountFromText(
   return null;
 }
 
-function resolveSalePrices(
-  result: ShoppingResult,
-): {
-  salePrice: number;
-  originalPrice: number;
-  discountPercentage: number;
-} | null {
-  const salePrice =
-    result.extracted_price ??
-    parsePrice(result.price);
+function extractUsdPrices(text: string): number[] {
+  const matches = Array.from(text.matchAll(/\$\s*([\d,]+(?:\.\d{1,2})?)/g));
 
-  if (
-    salePrice === null ||
-    !Number.isFinite(salePrice) ||
-    salePrice <= 0
-  ) {
-    return null;
-  }
-
-  const oldPrice =
-    result.extracted_old_price ??
-    parsePrice(result.old_price);
-
-  if (
-    oldPrice !== null &&
-    Number.isFinite(oldPrice) &&
-    oldPrice > salePrice
-  ) {
-    return {
-      salePrice,
-      originalPrice: oldPrice,
-      discountPercentage:
-        calculateDiscountPercentage(
-          oldPrice,
-          salePrice,
-        ),
-    };
-  }
-
-  const explicitDiscount =
-    getDiscountFromText(result);
-
-  if (!explicitDiscount) {
-    return null;
-  }
-
-  const calculatedOriginalPrice =
-    salePrice /
-    (1 - explicitDiscount / 100);
-
-  if (
-    !Number.isFinite(
-      calculatedOriginalPrice,
-    ) ||
-    calculatedOriginalPrice <= salePrice
-  ) {
-    return null;
-  }
-
-  return {
-    salePrice,
-    originalPrice:
-      Math.round(
-        calculatedOriginalPrice / 10,
-      ) * 10,
-    discountPercentage:
-      explicitDiscount,
-  };
+  return matches
+    .map((match) => Number.parseFloat(match[1].replace(/,/g, "")))
+    .filter(
+      (value) => Number.isFinite(value) && value > 0 && value < 1_000_000,
+    );
 }
 
-function createProductId(
-  result: ShoppingResult,
-): string {
-  if (result.product_id) {
-    return result.product_id;
+function extractKrwPrices(text: string): number[] {
+  const wonSuffixMatches = Array.from(text.matchAll(/([\d,]{3,})\s*원/g)).map(
+    (match) => Number.parseInt(match[1].replace(/,/g, ""), 10),
+  );
+
+  const wonPrefixMatches = Array.from(
+    text.matchAll(/(?:₩|KRW)\s*([\d,]+)/gi),
+  ).map((match) => Number.parseInt(match[1].replace(/,/g, ""), 10));
+
+  return [...wonSuffixMatches, ...wonPrefixMatches].filter(
+    (value) =>
+      Number.isFinite(value) && value >= 1_000 && value < 1_000_000_000,
+  );
+}
+
+function uniqueSortedPrices(prices: number[]): number[] {
+  return Array.from(
+    new Set(prices.map((price) => Math.round(price * 100) / 100)),
+  ).sort((a, b) => a - b);
+}
+
+function resolveSalePrices(text: string, market: Market): ParsedPrices | null {
+  const prices = uniqueSortedPrices(
+    market === "KR" ? extractKrwPrices(text) : extractUsdPrices(text),
+  );
+
+  const explicitDiscount = extractDiscountPercentage(text);
+
+  if (prices.length >= 2) {
+    const salePrice = prices[0];
+    const originalPrice = prices[prices.length - 1];
+
+    if (originalPrice > salePrice) {
+      return {
+        salePrice,
+        originalPrice,
+        discountPercentage: calculateDiscountPercentage(
+          originalPrice,
+          salePrice,
+        ),
+      };
+    }
   }
 
+  if (prices.length >= 1 && explicitDiscount) {
+    const salePrice = prices[0];
+    const originalPrice = salePrice / (1 - explicitDiscount / 100);
+
+    if (Number.isFinite(originalPrice) && originalPrice > salePrice) {
+      return {
+        salePrice,
+        originalPrice:
+          market === "KR"
+            ? Math.round(originalPrice / 10) * 10
+            : Math.round(originalPrice * 100) / 100,
+        discountPercentage: explicitDiscount,
+      };
+    }
+  }
+
+  return null;
+}
+
+function getSourceName(result: SearxngResult): string {
+  try {
+    return new URL(result.url).hostname.replace(/^www\./, "");
+  } catch {
+    return result.engine?.trim() || "Online retailer";
+  }
+}
+
+function getImageUrl(result: SearxngResult): string | null {
+  const image = result.thumbnail?.trim() || result.img_src?.trim();
+
+  if (!image || !/^https?:\/\//i.test(image)) {
+    return null;
+  }
+
+  return image;
+}
+
+function createProductId(result: SearxngResult): string {
   return createHash("sha256")
-    .update(
-      [
-        result.title ?? "",
-        result.source ?? "",
-        result.link ??
-          result.product_link ??
-          "",
-      ].join("|"),
-    )
+    .update([result.title, result.url, result.engine ?? ""].join("|"))
     .digest("hex")
     .slice(0, 24);
 }
 
-function collectResultGroups(
-  response: SerpApiResponse,
-): ShoppingResult[] {
-  const categorized =
-    response
-      .categorized_shopping_results
-      ?.flatMap(
-        (group) =>
-          group.shopping_results ?? [],
-      ) ?? [];
-
-  return [
-    ...(response.shopping_results ?? []),
-    ...(response
-      .inline_shopping_results ?? []),
-    ...categorized,
-  ];
-}
-
-function createQuery(
-  brand: BrandSearch,
-  market: Market,
-  gender: Exclude<
-    Gender,
-    "UNISEX"
-  >,
-): string {
-  if (market === "KR") {
-    const genderTerm =
-      gender === "MEN"
-        ? "남성"
-        : "여성";
-
-    /*
-     * Do not require both English and Korean
-     * brand names. OR increases recall.
-     */
-    return `("${brand.englishName}" OR "${brand.koreanName}") ${genderTerm}`;
-  }
-
-  const genderTerm =
-    gender === "MEN"
-      ? "men"
-      : "women";
-
-  return `"${brand.englishName}" ${genderTerm}`;
-}
-
 function normalizeProduct(
-  result: ShoppingResult,
+  result: SearxngResult,
   brand: BrandSearch,
   market: Market,
-  requestedGender: Exclude<
-    Gender,
-    "UNISEX"
-  >,
+  requestedGender: Exclude<Gender, "UNISEX">,
 ): Product | null {
-  const title =
-    result.title?.trim();
+  const title = result.title.trim();
+  const sourceUrl = result.url.trim();
+  const imageUrl = getImageUrl(result);
+  const text = getResultText(result);
 
-  const sourceName =
-    result.source?.trim() ||
-    "Online retailer";
-
-  const sourceUrl =
-    result.link?.trim() ??
-    result.product_link?.trim();
-
-  const imageUrl =
-    result.serpapi_thumbnail?.trim() ??
-    result.thumbnail?.trim();
-
-  if (
-    !title ||
-    !sourceUrl ||
-    !imageUrl
-  ) {
+  if (!title || !sourceUrl || !imageUrl) {
     return null;
   }
 
-  if (result.second_hand_condition) {
+  if (!containsSaleTerm(text) || isSecondHandResult(text)) {
     return null;
   }
 
-  const prices =
-    resolveSalePrices(result);
+  const detectedBrand = inferBrand(text);
+
+  if (!detectedBrand || detectedBrand.slug !== brand.slug) {
+    return null;
+  }
+
+  const prices = resolveSalePrices(text, market);
 
   if (!prices) {
-    return null;
-  }
-
-  /*
-   * Search results may include sponsored or loosely related products.
-   * Confirm the brand from the actual listing before returning it.
-   */
-  const detectedBrand = inferBrand(
-    [
-      title,
-      result.source,
-      result.tag,
-      result.badge,
-      ...(result.extensions ?? []),
-    ]
-      .filter(
-        (value): value is string =>
-          Boolean(value),
-      )
-      .join(" "),
-  );
-
-  if (
-    !detectedBrand ||
-    detectedBrand.slug !== brand.slug
-  ) {
     return null;
   }
 
   return {
     id: createProductId(result),
 
-    sourceName,
+    sourceName: getSourceName(result),
     sourceUrl,
 
     market,
-    currency:
-      market === "KR"
-        ? "KRW"
-        : "USD",
+    currency: market === "KR" ? "KRW" : "USD",
 
-    gender: inferGender(
-      title,
-      requestedGender,
-    ),
+    gender: inferGender(text, requestedGender),
 
-    /*
-     * The search itself is brand-specific,
-     * so do not require the title to contain
-     * the brand again.
-     */
-    /*
-     * Use the brand detected from the listing itself.
-     */
     brandSlug: detectedBrand.slug,
     brandName: detectedBrand.name,
 
     productName: title,
-    categorySlug:
-      inferCategory(title),
+    categorySlug: inferCategory(text),
 
     imageUrl,
 
-    originalPrice:
-      prices.originalPrice,
-    salePrice:
-      prices.salePrice,
-    discountPercentage:
-      prices.discountPercentage,
-    saleVerification:
-      prices.originalPrice !== null &&
-      prices.discountPercentage !== null
-        ? "VERIFIED"
-        : "UNVERIFIED",
+    originalPrice: prices.originalPrice,
+    salePrice: prices.salePrice,
+    discountPercentage: prices.discountPercentage,
+    saleVerification: "VERIFIED",
 
     isAvailable: true,
-    collectedAt:
-      new Date().toISOString(),
+    collectedAt: new Date().toISOString(),
   };
-}
-
-async function fetchSearchPage(
-  url: string,
-): Promise<SearchPageResult> {
-  try {
-    const response = await fetch(url, {
-      headers: {
-        Accept: "application/json",
-      },
-      next: {
-        revalidate: 3600,
-      },
-    });
-
-    const body =
-      (await response.json()) as SerpApiResponse;
-
-    if (!response.ok || body.error) {
-      return {
-        results: [],
-        error:
-          body.error ??
-          `HTTP ${response.status}`,
-      };
-    }
-
-    return {
-      results:
-        collectResultGroups(body),
-      nextUrl:
-        body.serpapi_pagination?.next,
-    };
-  } catch (error) {
-    return {
-      results: [],
-      error:
-        error instanceof Error
-          ? error.message
-          : "Unknown request error",
-    };
-  }
 }
 
 async function searchBrand(
-  apiKey: string,
   brand: BrandSearch,
   market: Market,
-  gender: Exclude<
-    Gender,
-    "UNISEX"
-  >,
+  gender: Exclude<Gender, "UNISEX">,
 ): Promise<BrandSearchResult> {
-  const parameters =
-    new URLSearchParams({
-      engine: "google_shopping",
-      q: createQuery(
-        brand,
-        market,
-        gender,
-      ),
-
-      api_key: apiKey,
-
-      google_domain:
-        market === "KR"
-          ? "google.co.kr"
-          : "google.com",
-
-      gl:
-        market === "KR"
-          ? "kr"
-          : "us",
-
-      hl:
-        market === "KR"
-          ? "ko"
-          : "en",
-
-      /*
-       * City-level location gives the
-       * search a Korean user context.
-       */
-      location:
-        market === "KR"
-          ? "Seoul,South Korea"
-          : "New York,New York,United States",
-
-      /*
-       * Ask Google Shopping for sale
-       * products before local filtering.
-       */
-      on_sale: "true",
-
-      device: "desktop",
+  try {
+    const response = await searchSearxng(createQuery(brand, market, gender), {
+      language: market === "KR" ? "ko-KR" : "en-US",
+      page: 1,
     });
 
-  const firstUrl =
-    `https://serpapi.com/search.json?${parameters.toString()}`;
+    const products = response.results
+      .map((result) => normalizeProduct(result, brand, market, gender))
+      .filter((product): product is Product => product !== null);
 
-  const firstPage =
-    await fetchSearchPage(firstUrl);
-
-  const allResults = [
-    ...firstPage.results,
-  ];
-
-  let error = firstPage.error;
-
-  /*
-   * Follow one next-page URL when present.
-   * This increases coverage while limiting
-   * API usage.
-   */
-  if (
-    firstPage.nextUrl &&
-    !firstPage.error
-  ) {
-    const nextUrl = new URL(
-      firstPage.nextUrl,
-    );
-
-    if (
-      !nextUrl.searchParams.has(
-        "api_key",
-      )
-    ) {
-      nextUrl.searchParams.set(
-        "api_key",
-        apiKey,
-      );
-    }
-
-    const secondPage =
-      await fetchSearchPage(
-        nextUrl.toString(),
-      );
-
-    allResults.push(
-      ...secondPage.results,
-    );
-
-    if (secondPage.error) {
-      error = secondPage.error;
-    }
+    return {
+      products,
+      rawCount: response.results.length,
+      unresponsiveEngines: response.unresponsiveEngines,
+    };
+  } catch (error) {
+    return {
+      products: [],
+      rawCount: 0,
+      unresponsiveEngines: [],
+      error: error instanceof Error ? error.message : "Unknown SearXNG error",
+    };
   }
-
-  const products = allResults
-    .map((result) =>
-      normalizeProduct(
-        result,
-        brand,
-        market,
-        gender,
-      ),
-    )
-    .filter(
-      (
-        product,
-      ): product is Product =>
-        product !== null,
-    );
-
-  return {
-    products,
-    rawCount:
-      allResults.length,
-    error,
-  };
 }
 
-export async function GET(
-  request: NextRequest,
-) {
-  const apiKey =
-    process.env.SERPAPI_API_KEY;
-
-  if (!apiKey) {
+export async function GET(request: NextRequest) {
+  if (!process.env.SEARXNG_URL?.trim()) {
     return NextResponse.json(
       {
-        error:
-          "SERPAPI_API_KEY is missing.",
+        error: "SEARXNG_URL is missing.",
       },
       {
         status: 500,
@@ -635,120 +389,78 @@ export async function GET(
     );
   }
 
-  const marketParameter =
-    request.nextUrl.searchParams.get(
-      "market",
-    );
+  const marketParameter = request.nextUrl.searchParams.get("market");
 
-  const genderParameter =
-    request.nextUrl.searchParams.get(
-      "gender",
-    );
+  const genderParameter = request.nextUrl.searchParams.get("gender");
 
-  const debug =
-    request.nextUrl.searchParams.get(
-      "debug",
-    ) === "true";
+  const debug = request.nextUrl.searchParams.get("debug") === "true";
 
-  const market: Market =
-    isMarket(marketParameter)
-      ? marketParameter
-      : "US";
+  const market: Market = isMarket(marketParameter) ? marketParameter : "US";
 
-  const gender: Exclude<
-    Gender,
-    "UNISEX"
-  > = isRequestedGender(
-    genderParameter,
-  )
+  const gender: Exclude<Gender, "UNISEX"> = isRequestedGender(genderParameter)
     ? genderParameter
     : "MEN";
 
-  const results =
-    await Promise.all(
-      BRANDS.map((brand) =>
-        searchBrand(
-          apiKey,
-          brand,
-          market,
-          gender,
-        ),
-      ),
-    );
+  const results = await Promise.all(
+    BRANDS.map((brand) => searchBrand(brand, market, gender)),
+  );
 
-  const allProducts =
-    results.flatMap(
-      (result) =>
-        result.products,
-    );
+  const allProducts = results.flatMap((result) => result.products);
 
-  const products =
-    Array.from(
-      new Map(
-        allProducts.map(
-          (product) => [
-            [
-              product.sourceName,
-              product.productName,
-              product.salePrice,
-            ].join("|"),
-            product,
-          ],
-        ),
-      ).values(),
+  const products = Array.from(
+    new Map(
+      allProducts.map((product) => [
+        [product.sourceName, product.productName, product.salePrice].join("|"),
+        product,
+      ]),
+    ).values(),
+  );
+
+  const errors = results
+    .map((result) => result.error)
+    .filter((error): error is string => Boolean(error));
+
+  if (products.length === 0 && errors.length === results.length) {
+    return NextResponse.json(
+      {
+        error: errors[0] ?? "Unable to retrieve sale listings.",
+      },
+      {
+        status: 502,
+      },
     );
+  }
 
   return NextResponse.json({
     products,
     count: products.length,
     market,
     gender,
-    updatedAt:
-      new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
 
     ...(debug
       ? {
           diagnostics: {
-            brandSearches:
-              BRANDS.length,
+            provider: "searxng",
 
-            rawResults:
-              results.reduce(
-                (
-                  total,
-                  result,
-                ) =>
-                  total +
-                  result.rawCount,
-                0,
-              ),
+            brandSearches: BRANDS.length,
 
-            productsBeforeDeduplication:
-              allProducts.length,
+            rawResults: results.reduce(
+              (total, result) => total + result.rawCount,
+              0,
+            ),
 
-            productsAfterDeduplication:
-              products.length,
+            productsBeforeDeduplication: allProducts.length,
 
-            byBrand:
-              BRANDS.map(
-                (
-                  brand,
-                  index,
-                ) => ({
-                  brand:
-                    brand.englishName,
-                  rawResults:
-                    results[index]
-                      .rawCount,
-                  products:
-                    results[index]
-                      .products
-                      .length,
-                  error:
-                    results[index]
-                      .error,
-                }),
-              ),
+            productsAfterDeduplication: products.length,
+
+            byBrand: BRANDS.map((brand, index) => ({
+              brand: brand.englishName,
+              rawResults: results[index].rawCount,
+              products: results[index].products.length,
+              error: results[index].error,
+              unresponsiveEngines: results[index].unresponsiveEngines,
+            })),
           },
         }
       : {}),

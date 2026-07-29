@@ -5,8 +5,6 @@ import { discoverKoreanRetailerPages } from "./google-retailer-search";
 import { parseRetailerProductPage } from "./parse-retailer-product";
 
 interface CollectOptions {
-  apiKey: string;
-
   brandSlug: BrandSlug;
   englishBrandName: string;
   koreanBrandName: string;
@@ -15,14 +13,12 @@ interface CollectOptions {
 }
 
 export async function collectKoreanRetailerProducts({
-  apiKey,
   brandSlug,
   englishBrandName,
   koreanBrandName,
   gender,
 }: CollectOptions): Promise<Product[]> {
   const candidates = await discoverKoreanRetailerPages({
-    apiKey,
     englishBrandName,
     koreanBrandName,
     gender,
@@ -56,12 +52,9 @@ export async function collectKoreanRetailerProducts({
     ),
   );
 
-  const products = settled
-    .flatMap((result) =>
-      result.status === "fulfilled" && result.value
-        ? [result.value]
-        : [],
-    );
+  const products = settled.flatMap((result) =>
+    result.status === "fulfilled" && result.value ? [result.value] : [],
+  );
 
   return Array.from(
     new Map(
