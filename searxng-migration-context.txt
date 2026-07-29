@@ -1,0 +1,660 @@
+=== PACKAGE.JSON ===
+{
+  "name": "crazy_sajangnim",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.8",
+    "cheerio": "^1.2.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.26.0",
+    "next": "16.2.11",
+    "p-limit": "^7.3.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "robots-parser": "^3.0.1",
+    "swr": "^2.4.2",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.11",
+    "prettier": "^3.9.6",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}
+
+=== PRODUCT API ROUTE ===
+import { createHash } from "node:crypto";
+import { NextRequest, NextResponse } from "next/server";
+import { calculateDiscountPercentage } from "@/lib/utils";
+import { inferCategory } from "@/lib/products/infer-category";
+import { inferGender } from "@/lib/products/infer-gender";
+import { inferBrand } from "@/lib/products/infer-brand";
+import type {
+  BrandSlug,
+} from "@/constants/brands";
+import type {
+  Gender,
+  Market,
+  Product,
+} from "@/types/product";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+interface ShoppingResult {
+  title?: string;
+  product_id?: string;
+
+  link?: string;
+  product_link?: string;
+
+  source?: string;
+
+  price?: string;
+  extracted_price?: number;
+
+  old_price?: string;
+  extracted_old_price?: number;
+
+  thumbnail?: string;
+  serpapi_thumbnail?: string;
+
+  tag?: string;
+  badge?: string;
+  extensions?: string[];
+
+  second_hand_condition?: string;
+}
+
+interface CategorizedShoppingResult {
+  shopping_results?: ShoppingResult[];
+}
+
+interface SerpApiResponse {
+  shopping_results?: ShoppingResult[];
+  inline_shopping_results?: ShoppingResult[];
+
+  categorized_shopping_results?: CategorizedShoppingResult[];
+
+  serpapi_pagination?: {
+    next?: string;
+  };
+
+  error?: string;
+}
+
+interface BrandSearch {
+  slug: BrandSlug;
+  englishName: string;
+  koreanName: string;
+}
+
+interface SearchPageResult {
+  results: ShoppingResult[];
+  nextUrl?: string;
+  error?: string;
+}
+
+interface BrandSearchResult {
+  products: Product[];
+  rawCount: number;
+  error?: string;
+}
+
+const BRANDS: BrandSearch[] = [
+  {
+    slug: "auralee",
+    englishName: "AURALEE",
+    koreanName: "오라리",
+  },
+  {
+    slug: "beams-plus",
+    englishName: "BEAMS PLUS",
+    koreanName: "빔즈 플러스",
+  },
+  {
+    slug: "comoli",
+    englishName: "COMOLI",
+    koreanName: "코모리",
+  },
+  {
+    slug: "danton",
+    englishName: "DANTON",
+    koreanName: "단톤",
+  },
+  {
+    slug: "kamiya",
+    englishName: "KAMIYA",
+    koreanName: "카미야",
+  },
+  {
+    slug: "kapital",
+    englishName: "KAPITAL",
+    koreanName: "캐피탈",
+  },
+  {
+    slug: "lemaire",
+    englishName: "LEMAIRE",
+    koreanName: "르메르",
+  },
+  {
+    slug: "needles",
+    englishName: "NEEDLES",
+    koreanName: "니들스",
+  },
+];
+
+function isMarket(
+  value: string | null,
+): value is Market {
+  return value === "US" || value === "KR";
+}
+
+function isRequestedGender(
+  value: string | null,
+): value is Exclude<Gender, "UNISEX"> {
+  return value === "MEN" || value === "WOMEN";
+}
+
+function parsePrice(
+  value?: string,
+): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value
+    .replace(/,/g, "")
+    .replace(/[^\d.]/g, "");
+
+  const result = Number.parseFloat(normalized);
+
+  return Number.isFinite(result)
+    ? result
+    : null;
+}
+
+function getDiscountFromText(
+  result: ShoppingResult,
+): number | null {
+  const values = [
+    result.tag,
+    result.badge,
+    ...(result.extensions ?? []),
+  ].filter(
+    (value): value is string =>
+      Boolean(value),
+  );
+
+  for (const value of values) {
+    const match =
+      value.match(
+        /(\d{1,2})\s*%\s*(?:off|할인)?/i,
+      ) ??
+      value.match(
+        /(?:할인율\s*)?(\d{1,2})\s*%/i,
+      );
+
+    if (!match) {
+      continue;
+    }
+
+    const percentage =
+      Number.parseInt(match[1], 10);
+
+    if (
+      percentage > 0 &&
+      percentage < 100
+    ) {
+      return percentage;
+    }
+  }
+
+  return null;
+}
+
+function resolveSalePrices(
+  result: ShoppingResult,
+): {
+  salePrice: number;
+  originalPrice: number;
+  discountPercentage: number;
+} | null {
+  const salePrice =
+    result.extracted_price ??
+    parsePrice(result.price);
+
+  if (
+    salePrice === null ||
+    !Number.isFinite(salePrice) ||
+    salePrice <= 0
+  ) {
+    return null;
+  }
+
+  const oldPrice =
+    result.extracted_old_price ??
+    parsePrice(result.old_price);
+
+  if (
+    oldPrice !== null &&
+    Number.isFinite(oldPrice) &&
+    oldPrice > salePrice
+  ) {
+    return {
+      salePrice,
+      originalPrice: oldPrice,
+      discountPercentage:
+        calculateDiscountPercentage(
+          oldPrice,
+          salePrice,
+        ),
+    };
+  }
+
+  const explicitDiscount =
+    getDiscountFromText(result);
+
+  if (!explicitDiscount) {
+    return null;
+  }
+
+  const calculatedOriginalPrice =
+    salePrice /
+    (1 - explicitDiscount / 100);
+
+  if (
+    !Number.isFinite(
+      calculatedOriginalPrice,
+    ) ||
+    calculatedOriginalPrice <= salePrice
+  ) {
+    return null;
+  }
+
+  return {
+    salePrice,
+    originalPrice:
+      Math.round(
+        calculatedOriginalPrice / 10,
+      ) * 10,
+    discountPercentage:
+      explicitDiscount,
+  };
+}
+
+function createProductId(
+  result: ShoppingResult,
+): string {
+  if (result.product_id) {
+    return result.product_id;
+  }
+
+  return createHash("sha256")
+    .update(
+      [
+        result.title ?? "",
+        result.source ?? "",
+        result.link ??
+          result.product_link ??
+          "",
+      ].join("|"),
+    )
+    .digest("hex")
+    .slice(0, 24);
+}
+
+function collectResultGroups(
+  response: SerpApiResponse,
+): ShoppingResult[] {
+  const categorized =
+    response
+      .categorized_shopping_results
+      ?.flatMap(
+        (group) =>
+          group.shopping_results ?? [],
+      ) ?? [];
+
+  return [
+    ...(response.shopping_results ?? []),
+    ...(response
+      .inline_shopping_results ?? []),
+    ...categorized,
+  ];
+}
+
+function createQuery(
+  brand: BrandSearch,
+  market: Market,
+  gender: Exclude<
+    Gender,
+    "UNISEX"
+  >,
+): string {
+  if (market === "KR") {
+    const genderTerm =
+      gender === "MEN"
+        ? "남성"
+        : "여성";
+
+    /*
+     * Do not require both English and Korean
+     * brand names. OR increases recall.
+     */
+    return `("${brand.englishName}" OR "${brand.koreanName}") ${genderTerm}`;
+  }
+
+  const genderTerm =
+    gender === "MEN"
+      ? "men"
+      : "women";
+
+  return `"${brand.englishName}" ${genderTerm}`;
+}
+
+function normalizeProduct(
+  result: ShoppingResult,
+  brand: BrandSearch,
+  market: Market,
+  requestedGender: Exclude<
+    Gender,
+    "UNISEX"
+  >,
+): Product | null {
+  const title =
+    result.title?.trim();
+
+  const sourceName =
+    result.source?.trim() ||
+    "Online retailer";
+
+  const sourceUrl =
+    result.link?.trim() ??
+    result.product_link?.trim();
+
+  const imageUrl =
+    result.serpapi_thumbnail?.trim() ??
+    result.thumbnail?.trim();
+
+  if (
+    !title ||
+    !sourceUrl ||
+    !imageUrl
+  ) {
+    return null;
+  }
+
+  if (result.second_hand_condition) {
+    return null;
+  }
+
+  const prices =
+    resolveSalePrices(result);
+
+  if (!prices) {
+    return null;
+  }
+
+  /*
+   * Search results may include sponsored or loosely related products.
+   * Confirm the brand from the actual listing before returning it.
+   */
+  const detectedBrand = inferBrand(
+    [
+      title,
+      result.source,
+      result.tag,
+      result.badge,
+      ...(result.extensions ?? []),
+    ]
+      .filter(
+        (value): value is string =>
+          Boolean(value),
+      )
+      .join(" "),
+  );
+
+  if (
+    !detectedBrand ||
+    detectedBrand.slug !== brand.slug
+  ) {
+    return null;
+  }
+
+  return {
+    id: createProductId(result),
+
+    sourceName,
+    sourceUrl,
+
+    market,
+    currency:
+      market === "KR"
+        ? "KRW"
+        : "USD",
+
+    gender: inferGender(
+      title,
+      requestedGender,
+    ),
+
+    /*
+     * The search itself is brand-specific,
+     * so do not require the title to contain
+     * the brand again.
+     */
+    /*
+     * Use the brand detected from the listing itself.
+     */
+    brandSlug: detectedBrand.slug,
+    brandName: detectedBrand.name,
+
+    productName: title,
+    categorySlug:
+      inferCategory(title),
+
+    imageUrl,
+
+    originalPrice:
+      prices.originalPrice,
+    salePrice:
+      prices.salePrice,
+    discountPercentage:
+      prices.discountPercentage,
+    saleVerification:
+      prices.originalPrice !== null &&
+      prices.discountPercentage !== null
+        ? "VERIFIED"
+        : "UNVERIFIED",
+
+    isAvailable: true,
+    collectedAt:
+      new Date().toISOString(),
+  };
+}
+
+async function fetchSearchPage(
+  url: string,
+): Promise<SearchPageResult> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+      },
+      next: {
+        revalidate: 3600,
+      },
+    });
+
+    const body =
+      (await response.json()) as SerpApiResponse;
+
+    if (!response.ok || body.error) {
+      return {
+        results: [],
+        error:
+          body.error ??
+          `HTTP ${response.status}`,
+      };
+    }
+
+    return {
+      results:
+        collectResultGroups(body),
+      nextUrl:
+        body.serpapi_pagination?.next,
+    };
+  } catch (error) {
+    return {
+      results: [],
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unknown request error",
+    };
+  }
+}
+
+async function searchBrand(
+  apiKey: string,
+  brand: BrandSearch,
+  market: Market,
+  gender: Exclude<
+    Gender,
+    "UNISEX"
+  >,
+
+=== PRODUCT TYPE ===
+import type { BrandSlug } from "@/constants/brands";
+import type { CategorySlug } from "@/constants/categories";
+
+export type Market = "US" | "KR";
+export type Currency = "USD" | "KRW";
+export type Gender = "MEN" | "WOMEN" | "UNISEX";
+export type SaleVerification = "VERIFIED" | "UNVERIFIED";
+
+export type ProductSort =
+  | "discount-desc"
+  | "price-asc"
+  | "price-desc"
+  | "newest";
+
+export interface Product {
+  id: string;
+
+  sourceName: string;
+  sourceUrl: string;
+
+  market: Market;
+  currency: Currency;
+  gender: Gender;
+
+  brandSlug: BrandSlug;
+  brandName: string;
+
+  productName: string;
+  categorySlug: Exclude<CategorySlug, "all">;
+
+  imageUrl: string;
+
+  originalPrice: number | null;
+  salePrice: number;
+  discountPercentage: number | null;
+  saleVerification: SaleVerification;
+
+  isAvailable: boolean;
+  collectedAt: string;
+}
+
+=== PRODUCT HOOK ===
+"use client";
+
+import useSWR from "swr";
+import type {
+  Gender,
+  Market,
+  Product,
+} from "@/types/product";
+
+interface ProductResponse {
+  products: Product[];
+  count: number;
+  market: Market;
+  gender: Gender;
+  updatedAt: string;
+}
+
+interface ErrorResponse {
+  error?: string;
+}
+
+async function fetcher(
+  url: string,
+): Promise<ProductResponse> {
+  const response = await fetch(url);
+
+  const body = (await response.json()) as
+    | ProductResponse
+    | ErrorResponse;
+
+  if (!response.ok) {
+    throw new Error(
+      "error" in body && body.error
+        ? body.error
+        : "Unable to load product listings.",
+    );
+  }
+
+  return body as ProductResponse;
+}
+
+export function useProducts(
+  market: Market,
+  gender: Exclude<Gender, "UNISEX">,
+) {
+  const query = new URLSearchParams({
+    market,
+    gender,
+  });
+
+  return useSWR<ProductResponse>(
+    `/api/products?${query.toString()}`,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60 * 60 * 1000,
+      keepPreviousData: true,
+    },
+  );
+}
+
+=== SERP REFERENCES ===
+src/app/api/products/route.ts:35:  serpapi_thumbnail?: string;
+src/app/api/products/route.ts:48:interface SerpApiResponse {
+src/app/api/products/route.ts:54:  serpapi_pagination?: {
+src/app/api/products/route.ts:283:  response: SerpApiResponse,
+src/app/api/products/route.ts:351:    result.serpapi_thumbnail?.trim() ??
+src/app/api/products/route.ts:465:      (await response.json()) as SerpApiResponse;
+src/app/api/products/route.ts:480:        body.serpapi_pagination?.next,
+src/app/api/products/route.ts:547:    `https://serpapi.com/search.json?${parameters.toString()}`;
+src/app/api/products/route.ts:624:    process.env.SERPAPI_API_KEY;
+src/app/api/products/route.ts:630:          "SERPAPI_API_KEY is missing.",
+src/lib/retailers/google-retailer-search.ts:15:  serpapi_pagination?: {
+src/lib/retailers/google-retailer-search.ts:76:    `https://serpapi.com/search.json?${params.toString()}`,
+src/lib/retailers/google-retailer-search.ts:135:   * Limit the number of retailer-specific searches to control SerpApi usage.

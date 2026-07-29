@@ -35,8 +35,15 @@ export async function compressImageForUpload(file: File): Promise<File> {
       imageOrientation: "from-image",
     });
   } catch {
-    // The browser can't decode this format (e.g. HEIC on desktop Chrome).
-    return file;
+    // Some browsers (notably older Safari) reject the options argument — retry
+    // without it before giving up, so HEIC photos still get converted to JPEG.
+    try {
+      bitmap = await createImageBitmap(file);
+    } catch {
+      // The browser genuinely can't decode this format
+      // (e.g. HEIC on desktop Chrome/Firefox); send the original untouched.
+      return file;
+    }
   }
 
   try {
