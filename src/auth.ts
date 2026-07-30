@@ -7,6 +7,11 @@ declare module "next-auth" {
   interface Session {
     user: {
       id: string;
+      /**
+       * Whether Google has verified the address on this account.
+       * Named distinctly from Auth.js's own Date-typed emailVerified.
+       */
+      googleEmailVerified?: boolean;
     } & DefaultSession["user"];
   }
 }
@@ -89,6 +94,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
        */
       if (account?.provider === "google" && profile?.sub) {
         token.sub = profile.sub;
+
+        if (typeof profile.email_verified === "boolean") {
+          token.googleEmailVerified = profile.email_verified;
+        }
       }
 
       return token;
@@ -97,6 +106,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     session({ session, token }) {
       if (token.sub) {
         session.user.id = token.sub;
+      }
+
+      if (typeof token.googleEmailVerified === "boolean") {
+        session.user.googleEmailVerified = token.googleEmailVerified;
       }
 
       return session;
