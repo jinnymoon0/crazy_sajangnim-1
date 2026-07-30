@@ -57,11 +57,45 @@ export async function getAuthState(): Promise<AuthState> {
 
     /*
      * A valid Google session without a matching row means the sign-in
-     * record was never written (or was written under a different id).
-     * Self-heal by creating the account here instead of treating the
-     * user as signed out, which previously looped them back to /login.
+     * record was never written, or the account id changed. Before
+     * creating anything, adopt an existing account with the same
+     * verified email — otherwise a returning user would be handed a
+     * duplicate account and asked to pick a username all over again.
      */
     if (!data) {
+      const email = session.user?.email ?? null;
+
+      if (email && session.user?.googleEmailVerified !== false) {
+        const { data: byEmail } = await supabase
+          .from("site_users")
+          .select("id, username")
+          .eq("email", email)
+          .not("username", "is", null)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (byEmail) {
+          console.log("Linking Google id to existing account:", email);
+
+          await supabase
+            .from("site_users")
+            .update({
+              google_sub: googleSub,
+              last_login_at: new Date().toISOString(),
+            })
+            .eq("id", byEmail.id);
+
+          return {
+            authenticated: true,
+            userId: byEmail.id,
+            username: byEmail.username ?? null,
+            name: session.user?.name ?? null,
+            picture: session.user?.image ?? null,
+          };
+        }
+      }
+
       console.log("Self-healing missing site_users row for sub:", googleSub);
 
       const { data: created, error: createError } = await supabase
@@ -69,7 +103,7 @@ export async function getAuthState(): Promise<AuthState> {
         .upsert(
           {
             google_sub: googleSub,
-            email: session.user?.email ?? null,
+            email,
             full_name: session.user?.name ?? null,
             avatar_url: session.user?.image ?? null,
             last_login_at: new Date().toISOString(),
