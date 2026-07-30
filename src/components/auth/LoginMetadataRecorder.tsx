@@ -40,6 +40,25 @@ export default function LoginMetadataRecorder() {
             typeof language === "string" && language.length > 0,
         );
 
+        /*
+         * Device details, all best-effort — every field is optional and
+         * some browsers expose none of the extended APIs.
+         */
+        const extendedNavigator = navigator as Navigator & {
+          deviceMemory?: number;
+          connection?: { effectiveType?: string };
+          userAgentData?: { platform?: string };
+        };
+
+        const screenSize = window.screen
+          ? `${window.screen.width}x${window.screen.height}@${window.devicePixelRatio || 1}x`
+          : null;
+
+        const devicePlatform =
+          extendedNavigator.userAgentData?.platform ||
+          navigator.platform ||
+          null;
+
         const response = await fetch("/api/account/login-metadata", {
           method: "POST",
           headers: {
@@ -49,6 +68,13 @@ export default function LoginMetadataRecorder() {
             browserLanguage: navigator.language || null,
             browserLanguages,
             timezone,
+            screenSize,
+            devicePlatform,
+            cpuCores: navigator.hardwareConcurrency ?? null,
+            deviceMemoryGb: extendedNavigator.deviceMemory ?? null,
+            connectionType:
+              extendedNavigator.connection?.effectiveType ?? null,
+            referrer: document.referrer || null,
           }),
           signal: controller.signal,
         });
