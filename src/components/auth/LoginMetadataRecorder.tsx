@@ -19,7 +19,16 @@ export default function LoginMetadataRecorder() {
           signal: controller.signal,
         });
 
-        if (!sessionResponse.ok) {
+        /*
+         * A signed-out visit can be answered with an HTML redirect
+         * rather than JSON; parsing that would throw.
+         */
+        if (
+          !sessionResponse.ok ||
+          !sessionResponse.headers
+            .get("content-type")
+            ?.includes("application/json")
+        ) {
           return;
         }
 
