@@ -58,7 +58,12 @@ type SubmissionStatus =
   | { type: "error"; message: string }
   | { type: "success"; message: string };
 
-export default function BlogPostForm() {
+interface BlogPostFormProps {
+  /** The signed-in account's username — posts are published under it. */
+  username: string;
+}
+
+export default function BlogPostForm({ username }: BlogPostFormProps) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -357,7 +362,8 @@ export default function BlogPostForm() {
         </h2>
 
         <p className="mt-2 text-sm leading-6 text-neutral-600">
-          Upload up to five clothing photos. No account is required.
+          Upload up to five clothing photos. Posting as{" "}
+          <span className="font-semibold text-neutral-800">{username}</span>.
         </p>
       </div>
 

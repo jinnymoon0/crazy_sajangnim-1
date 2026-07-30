@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import AccountMenu from "@/components/auth/AccountMenu";
 import BlogFeed from "@/components/blog/BlogFeed";
 import BlogPostForm from "@/components/blog/BlogPostForm";
 import { requireOnboardedUser } from "@/lib/auth/session";
@@ -33,7 +34,7 @@ async function getBlogPosts(): Promise<BlogPost[]> {
 }
 
 export default async function BlogPage() {
-  await requireOnboardedUser();
+  const user = await requireOnboardedUser();
 
   const posts = await getBlogPosts();
 
@@ -53,23 +54,27 @@ export default async function BlogPage() {
 
               <p className="mt-4 text-base leading-7 text-neutral-600">
                 Share clothing finds, styling ideas, reviews, and sale
-                discoveries without creating an account.
+                discoveries with the community.
               </p>
             </div>
 
-            <Link
-              href="/"
-              className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full bg-neutral-950 px-5 py-3 text-sm font-bold !text-white transition hover:bg-neutral-700 hover:!text-white focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
-            >
-              <span aria-hidden="true">←</span>
-              Back to shopping
-            </Link>
+            <div className="flex w-fit shrink-0 flex-col items-start gap-3 sm:items-end">
+              <Link
+                href="/"
+                className="inline-flex items-center gap-2 rounded-full bg-neutral-950 px-5 py-3 text-sm font-bold !text-white transition hover:bg-neutral-700 hover:!text-white focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
+              >
+                <span aria-hidden="true">←</span>
+                Back to shopping
+              </Link>
+
+              <AccountMenu />
+            </div>
           </div>
         </header>
 
         <div className="grid items-start gap-10 lg:grid-cols-[380px_minmax(0,1fr)]">
           <div className="lg:sticky lg:top-6">
-            <BlogPostForm />
+            <BlogPostForm username={user.username} />
           </div>
 
           <BlogFeed posts={posts} />

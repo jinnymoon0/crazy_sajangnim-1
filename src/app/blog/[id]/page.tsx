@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import AccountMenu from "@/components/auth/AccountMenu";
 import BlogComments from "@/components/blog/BlogComments";
 import BlogImageGallery from "@/components/blog/BlogImageGallery";
 import BlogPostManagement from "@/components/blog/BlogPostManagement";
@@ -117,7 +118,7 @@ async function getBlogComments(postId: string): Promise<CommentsResult> {
 }
 
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
-  await requireOnboardedUser();
+  const user = await requireOnboardedUser();
 
   const { id } = await params;
   const post = await getBlogPost(id);
@@ -156,6 +157,10 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
           >
             Go to shopping
           </Link>
+
+          <div className="ml-auto">
+            <AccountMenu />
+          </div>
         </nav>
 
         <article className="mt-6 overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm">
@@ -212,6 +217,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
           postId={post.id}
           initialComments={comments}
           commentsReady={commentsReady}
+          username={user.username}
         />
       </div>
     </main>
