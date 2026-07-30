@@ -14,6 +14,11 @@ export const proxy = auth((request) => {
 
 export const config = {
   matcher: [
-    "/((?!login|api/auth|api/cron|api/products|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    /*
+     * api/account is excluded because those routes authenticate
+     * themselves and must answer with JSON — a redirect to the login
+     * page would hand the browser HTML to parse.
+     */
+    "/((?!login|api/auth|api/account|api/cron|api/products|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
