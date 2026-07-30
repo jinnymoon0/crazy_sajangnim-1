@@ -13,6 +13,8 @@ type BlogCommentsProps = {
   postId: string;
   initialComments: BlogComment[];
   commentsReady: boolean;
+  /** The signed-in account's username — comments post under it. */
+  username: string;
 };
 
 type SubmissionStatus =
@@ -34,6 +36,7 @@ export default function BlogComments({
   postId,
   initialComments,
   commentsReady,
+  username,
 }: BlogCommentsProps) {
   const [comments, setComments] = useState<BlogComment[]>(initialComments);
   const [content, setContent] = useState("");
@@ -201,7 +204,8 @@ export default function BlogComments({
             htmlFor={`comment-content-${postId}`}
             className="mb-2 block text-sm font-semibold text-neutral-800"
           >
-            Comment
+            Comment as{" "}
+            <span className="font-bold text-neutral-950">{username}</span>
           </label>
 
           <textarea
