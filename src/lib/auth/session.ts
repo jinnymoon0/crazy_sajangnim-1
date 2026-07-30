@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 import { auth } from "@/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
@@ -58,6 +60,29 @@ export async function getAuthState(): Promise<AuthState> {
   } catch {
     return SIGNED_OUT;
   }
+}
+
+/*
+ * Server-side page guard: anyone not signed in goes to /login, and
+ * anyone whose Google account has no username yet goes to
+ * /choose-username. Pages call this so the redirect never depends on
+ * client-side JavaScript.
+ */
+export async function requireOnboardedUser(): Promise<SessionUser> {
+  const state = await getAuthState();
+
+  if (!state.authenticated) {
+    redirect("/login");
+  }
+
+  if (!state.userId || !state.username) {
+    redirect("/choose-username");
+  }
+
+  return {
+    id: state.userId,
+    username: state.username,
+  };
 }
 
 /*

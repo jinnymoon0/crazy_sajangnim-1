@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import BlogComments from "@/components/blog/BlogComments";
 import BlogImageGallery from "@/components/blog/BlogImageGallery";
 import BlogPostManagement from "@/components/blog/BlogPostManagement";
+import { requireOnboardedUser } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { BlogComment, BlogPost } from "@/types/blog";
 
@@ -116,6 +117,8 @@ async function getBlogComments(postId: string): Promise<CommentsResult> {
 }
 
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
+  await requireOnboardedUser();
+
   const { id } = await params;
   const post = await getBlogPost(id);
 

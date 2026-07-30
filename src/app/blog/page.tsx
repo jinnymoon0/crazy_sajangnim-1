@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import BlogFeed from "@/components/blog/BlogFeed";
 import BlogPostForm from "@/components/blog/BlogPostForm";
+import { requireOnboardedUser } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { BlogPost } from "@/types/blog";
 
@@ -32,6 +33,8 @@ async function getBlogPosts(): Promise<BlogPost[]> {
 }
 
 export default async function BlogPage() {
+  await requireOnboardedUser();
+
   const posts = await getBlogPosts();
 
   return (

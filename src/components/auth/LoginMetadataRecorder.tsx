@@ -14,7 +14,7 @@ export default function LoginMetadataRecorder() {
 
     async function recordMetadata() {
       try {
-        const sessionResponse = await fetch("/api/auth/me", {
+        const sessionResponse = await fetch("/api/account/me", {
           cache: "no-store",
           signal: controller.signal,
         });
