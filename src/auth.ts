@@ -81,6 +81,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
     },
 
+    jwt({ token, account, profile }) {
+      /*
+       * Pin the token subject to the stable Google account id. Never
+       * rely on library defaults for the identity every DB row is
+       * keyed by.
+       */
+      if (account?.provider === "google" && profile?.sub) {
+        token.sub = profile.sub;
+      }
+
+      return token;
+    },
+
     session({ session, token }) {
       if (token.sub) {
         session.user.id = token.sub;
