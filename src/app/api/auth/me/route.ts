@@ -1,16 +1,26 @@
 import { NextResponse } from "next/server";
 
-import { getSessionUser } from "@/lib/auth/session";
+import { getAuthState } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const user = await getSessionUser();
+    const state = await getAuthState();
 
     return NextResponse.json(
-      { user },
+      {
+        user: state.authenticated
+          ? {
+              id: state.userId,
+              username: state.username,
+              name: state.name,
+              picture: state.picture,
+              needsUsername: !state.username,
+            }
+          : null,
+      },
       {
         headers: {
           "Cache-Control": "no-store",

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { getSessionUser } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -87,13 +88,6 @@ const blogPostSchema = z.object({
     .trim()
     .min(1, "Please enter a description.")
     .max(5000, "The description must be 5,000 characters or fewer."),
-
-  authorName: z
-    .string()
-    .trim()
-    .max(40, "The display name must be 40 characters or fewer.")
-    .optional(),
-
 });
 
 function getFileExtension(file: File): string {
@@ -305,6 +299,19 @@ export async function POST(request: Request) {
       );
     }
 
+    /*
+     * The author is always the logged-in account; the client cannot
+     * choose a display name.
+     */
+    const sessionUser = await getSessionUser();
+
+    if (!sessionUser) {
+      return NextResponse.json(
+        { error: "Please log in to publish a post." },
+        { status: 401 },
+      );
+    }
+
     const formData = await request.formData();
 
     const website = String(formData.get("website") ?? "").trim();
@@ -319,7 +326,6 @@ export async function POST(request: Request) {
     const parsedFields = blogPostSchema.safeParse({
       title: formData.get("title"),
       content: formData.get("content"),
-      authorName: formData.get("authorName"),
     });
 
     if (!parsedFields.success) {
@@ -470,8 +476,7 @@ export async function POST(request: Request) {
       imageUrls.push(publicUrl);
     }
 
-    const authorName =
-      parsedFields.data.authorName?.trim() || "Anonymous";
+    const authorName = sessionUser.username;
 
     const { data: post, error: insertError } = await supabase
       .from("blog_posts")

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { getSessionUser } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { BlogComment } from "@/types/blog";
 
@@ -16,12 +17,6 @@ type RouteContext = {
 };
 
 const commentSchema = z.object({
-  authorName: z
-    .string()
-    .trim()
-    .max(40, "The display name must be 40 characters or fewer.")
-    .optional(),
-
   content: z
     .string()
     .trim()
@@ -107,6 +102,19 @@ export async function POST(request: Request, context: RouteContext) {
       );
     }
 
+    /*
+     * The commenter is always the logged-in account; the client cannot
+     * choose a display name.
+     */
+    const sessionUser = await getSessionUser();
+
+    if (!sessionUser) {
+      return NextResponse.json(
+        { error: "Please log in to comment." },
+        { status: 401 },
+      );
+    }
+
     const { id } = await context.params;
     const body: unknown = await request.json();
 
@@ -164,7 +172,7 @@ export async function POST(request: Request, context: RouteContext) {
       .from("blog_comments")
       .insert({
         post_id: id,
-        author_name: parsed.data.authorName?.trim() || "Anonymous",
+        author_name: sessionUser.username,
         content: parsed.data.content,
       })
       .select("id, post_id, author_name, content, created_at")

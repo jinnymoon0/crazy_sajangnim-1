@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 
-interface SessionUser {
-  id: string;
-  username: string;
+interface MeUser {
+  username: string | null;
+  name: string | null;
+  picture: string | null;
 }
 
 export default function AccountMenu() {
-  const router = useRouter();
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const [user, setUser] = useState<MeUser | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -24,7 +24,7 @@ export default function AccountMenu() {
         });
 
         const body = (await response.json()) as {
-          user?: SessionUser | null;
+          user?: MeUser | null;
         };
 
         if (!cancelled) {
@@ -44,17 +44,6 @@ export default function AccountMenu() {
     };
   }, []);
 
-  async function handleLogout() {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-    } catch {
-      // The cookie clears on the next successful request.
-    }
-
-    setUser(null);
-    router.refresh();
-  }
-
   if (!isLoaded) {
     return <div aria-hidden="true" className="w-16" />;
   }
@@ -70,18 +59,30 @@ export default function AccountMenu() {
     );
   }
 
+  const displayName = user.username ?? user.name ?? "Account";
+
   return (
     <div className="flex items-center gap-2">
+      {user.picture ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={user.picture}
+          alt=""
+          referrerPolicy="no-referrer"
+          className="h-7 w-7 rounded-full border border-black/10"
+        />
+      ) : null}
+
       <span
-        title={user.username}
+        title={displayName}
         className="max-w-24 truncate text-xs font-semibold md:max-w-36 md:text-sm"
       >
-        {user.username}
+        {displayName}
       </span>
 
       <button
         type="button"
-        onClick={handleLogout}
+        onClick={() => void signOut({ callbackUrl: "/login" })}
         className="inline-flex min-h-9 items-center rounded-full border border-black/15 bg-white px-3 text-xs transition hover:bg-black hover:text-white"
       >
         Log out
