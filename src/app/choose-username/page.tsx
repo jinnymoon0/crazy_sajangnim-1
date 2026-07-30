@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getAuthState } from "@/lib/auth/session";
+import SignOutLink from "@/components/auth/SignOutLink";
 import UsernamePicker from "@/components/auth/UsernamePicker";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,10 @@ export default async function ChooseUsernamePage() {
       <section className="w-full max-w-md rounded-3xl border border-black/10 bg-white p-6 shadow-sm sm:p-8">
         <UsernamePicker />
       </section>
+
+      <div className="mt-6">
+        <SignOutLink />
+      </div>
     </main>
   );
 }
