@@ -46,8 +46,52 @@ export async function getAuthState(): Promise<AuthState> {
       .eq("google_sub", googleSub)
       .maybeSingle();
 
-    if (error || !data) {
+    if (error) {
+      console.error("Auth state lookup failed:", {
+        code: error.code,
+        message: error.message,
+      });
+
       return SIGNED_OUT;
+    }
+
+    /*
+     * A valid Google session without a matching row means the sign-in
+     * record was never written (or was written under a different id).
+     * Self-heal by creating the account here instead of treating the
+     * user as signed out, which previously looped them back to /login.
+     */
+    if (!data) {
+      console.log("Self-healing missing site_users row for sub:", googleSub);
+
+      const { data: created, error: createError } = await supabase
+        .from("site_users")
+        .upsert(
+          {
+            google_sub: googleSub,
+            email: session.user?.email ?? null,
+            full_name: session.user?.name ?? null,
+            avatar_url: session.user?.image ?? null,
+            last_login_at: new Date().toISOString(),
+          },
+          { onConflict: "google_sub" },
+        )
+        .select("id, username")
+        .single();
+
+      if (createError || !created) {
+        console.error("Self-heal insert failed:", createError);
+
+        return SIGNED_OUT;
+      }
+
+      return {
+        authenticated: true,
+        userId: created.id,
+        username: created.username ?? null,
+        name: session.user?.name ?? null,
+        picture: session.user?.image ?? null,
+      };
     }
 
     return {
