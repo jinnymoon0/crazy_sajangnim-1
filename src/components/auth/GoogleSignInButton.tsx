@@ -8,7 +8,7 @@ export default function GoogleSignInButton() {
 
   function handleSignIn() {
     setIsPending(true);
-    void signIn("google", { callbackUrl: "/" });
+    void signIn("google", { callbackUrl: "/post-login" });
   }
 
   return (

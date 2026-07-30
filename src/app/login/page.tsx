@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
+import { getAuthState } from "@/lib/auth/session";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 
 export const dynamic = "force-dynamic";
@@ -15,10 +15,10 @@ type LoginPageProps = {
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const { error } = await searchParams;
 
-  const session = await auth();
+  const authState = await getAuthState();
 
-  if (session?.user) {
-    redirect("/");
+  if (authState.authenticated) {
+    redirect(authState.username ? "/" : "/choose-username");
   }
 
   return (
