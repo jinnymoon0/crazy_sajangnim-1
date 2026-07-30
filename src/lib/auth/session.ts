@@ -8,6 +8,14 @@ export interface SessionUser {
   username: string;
 }
 
+/*
+ * Real Google subjects are numeric strings. Anything else (e.g. a UUID
+ * from an older session) must never overwrite a stored account id.
+ */
+function isGoogleSubject(value: string): boolean {
+  return /^\d+$/.test(value);
+}
+
 export interface AuthState {
   authenticated: boolean;
   userId: string | null;
@@ -62,10 +70,42 @@ export async function getAuthState(): Promise<AuthState> {
      * verified email — otherwise a returning user would be handed a
      * duplicate account and asked to pick a username all over again.
      */
-    if (!data) {
-      const email = session.user?.email ?? null;
+    const email = session.user?.email ?? null;
+    const emailTrusted =
+      Boolean(email) && session.user?.googleEmailVerified !== false;
 
-      if (email && session.user?.googleEmailVerified !== false) {
+    /*
+     * The row for this id exists but has no username, while another
+     * account for the same verified email already has one. That is the
+     * same person arriving through a stale or duplicated id, so use
+     * their real account instead of asking for a username again.
+     */
+    if (data && !data.username && emailTrusted) {
+      const { data: named } = await supabase
+        .from("site_users")
+        .select("id, username")
+        .eq("email", email)
+        .not("username", "is", null)
+        .neq("id", data.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (named) {
+        console.log("Resolving to the existing named account for:", email);
+
+        return {
+          authenticated: true,
+          userId: named.id,
+          username: named.username ?? null,
+          name: session.user?.name ?? null,
+          picture: session.user?.image ?? null,
+        };
+      }
+    }
+
+    if (!data) {
+      if (emailTrusted) {
         const { data: byEmail } = await supabase
           .from("site_users")
           .select("id, username")
@@ -78,13 +118,19 @@ export async function getAuthState(): Promise<AuthState> {
         if (byEmail) {
           console.log("Linking Google id to existing account:", email);
 
-          await supabase
-            .from("site_users")
-            .update({
-              google_sub: googleSub,
-              last_login_at: new Date().toISOString(),
-            })
-            .eq("id", byEmail.id);
+          /*
+           * Only a genuine Google subject may take over the stored id;
+           * a stale identifier must not overwrite a working account.
+           */
+          if (isGoogleSubject(googleSub)) {
+            await supabase
+              .from("site_users")
+              .update({
+                google_sub: googleSub,
+                last_login_at: new Date().toISOString(),
+              })
+              .eq("id", byEmail.id);
+          }
 
           return {
             authenticated: true,
