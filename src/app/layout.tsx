@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+import UsernameGate from "@/components/auth/UsernameGate";
+
 export const metadata: Metadata = {
   title: "Crazy Sajangnim",
   description:
@@ -14,7 +16,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <UsernameGate />
+        {children}
+      </body>
     </html>
   );
 }

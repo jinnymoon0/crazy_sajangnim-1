@@ -1,76 +1,78 @@
-import { randomBytes } from "node:crypto";
-import { cookies } from "next/headers";
-
+import { auth } from "@/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-
-export const SESSION_COOKIE = "sajang_session";
-
-const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface SessionUser {
   id: string;
   username: string;
 }
 
-export function createSessionId(): string {
-  return randomBytes(32).toString("hex");
+export interface AuthState {
+  authenticated: boolean;
+  userId: string | null;
+  username: string | null;
+  name: string | null;
+  picture: string | null;
 }
 
-export function sessionExpiry(): Date {
-  return new Date(Date.now() + SESSION_DURATION_MS);
-}
+const SIGNED_OUT: AuthState = {
+  authenticated: false,
+  userId: null,
+  username: null,
+  name: null,
+  picture: null,
+};
 
-export function sessionCookieOptions(expires: Date) {
-  return {
-    httpOnly: true,
-    sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    expires,
-  };
+/*
+ * Resolve the Google session and the linked site_users row. A user who
+ * signed in but has not picked a username yet has userId set and
+ * username null.
+ */
+export async function getAuthState(): Promise<AuthState> {
+  const session = await auth();
+  const googleSub = session?.user?.id;
+
+  if (!googleSub) {
+    return SIGNED_OUT;
+  }
+
+  try {
+    const supabase = getSupabaseAdmin();
+
+    const { data, error } = await supabase
+      .from("site_users")
+      .select("id, username")
+      .eq("google_sub", googleSub)
+      .maybeSingle();
+
+    if (error || !data) {
+      return SIGNED_OUT;
+    }
+
+    return {
+      authenticated: true,
+      userId: data.id,
+      username: data.username ?? null,
+      name: session.user?.name ?? null,
+      picture: session.user?.image ?? null,
+    };
+  } catch {
+    return SIGNED_OUT;
+  }
 }
 
 /*
- * Resolve the logged-in user from the session cookie. Returns null for
- * missing, expired, or unknown sessions — including when the auth tables
- * have not been created yet.
+ * Fully onboarded users only (signed in AND chose a username) — what
+ * the blog APIs use to stamp authorship.
  */
 export async function getSessionUser(): Promise<SessionUser | null> {
-  const cookieStore = await cookies();
-  const sessionId = cookieStore.get(SESSION_COOKIE)?.value;
+  const state = await getAuthState();
 
-  if (!sessionId) {
-    return null;
-  }
-
-  const supabase = getSupabaseAdmin();
-
-  const { data, error } = await supabase
-    .from("site_sessions")
-    .select("expires_at, site_users ( id, username )")
-    .eq("id", sessionId)
-    .maybeSingle();
-
-  if (error || !data) {
-    return null;
-  }
-
-  if (new Date(data.expires_at) < new Date()) {
-    await supabase.from("site_sessions").delete().eq("id", sessionId);
-
-    return null;
-  }
-
-  const user = Array.isArray(data.site_users)
-    ? data.site_users[0]
-    : data.site_users;
-
-  if (!user) {
+  if (!state.authenticated || !state.userId || !state.username) {
     return null;
   }
 
   return {
-    id: user.id,
-    username: user.username,
+    id: state.userId,
+    username: state.username,
   };
 }

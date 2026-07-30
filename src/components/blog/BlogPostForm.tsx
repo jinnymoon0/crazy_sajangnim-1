@@ -383,25 +383,6 @@ export default function BlogPostForm() {
 
         <div>
           <label
-            htmlFor="authorName"
-            className="mb-2 block text-sm font-semibold text-neutral-800"
-          >
-            Display name
-          </label>
-
-          <input
-            id="authorName"
-            name="authorName"
-            type="text"
-            maxLength={40}
-            placeholder="Anonymous"
-            className="w-full rounded-xl border border-neutral-300 px-4 py-3 text-sm outline-none transition focus:border-neutral-950"
-          />
-        </div>
-
-
-        <div>
-          <label
             htmlFor="title"
             className="mb-2 block text-sm font-semibold text-neutral-800"
           >

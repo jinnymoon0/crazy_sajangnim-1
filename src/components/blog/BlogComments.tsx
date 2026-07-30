@@ -36,7 +36,6 @@ export default function BlogComments({
   commentsReady,
 }: BlogCommentsProps) {
   const [comments, setComments] = useState<BlogComment[]>(initialComments);
-  const [authorName, setAuthorName] = useState("");
   const [content, setContent] = useState("");
   const [website, setWebsite] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -101,7 +100,6 @@ export default function BlogComments({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          authorName,
           content,
           website,
         }),
@@ -195,25 +193,6 @@ export default function BlogComments({
             autoComplete="off"
             value={website}
             onChange={(event) => setWebsite(event.target.value)}
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor={`comment-author-${postId}`}
-            className="mb-2 block text-sm font-semibold text-neutral-800"
-          >
-            Display name
-          </label>
-
-          <input
-            id={`comment-author-${postId}`}
-            type="text"
-            maxLength={40}
-            placeholder="Anonymous"
-            value={authorName}
-            onChange={(event) => setAuthorName(event.target.value)}
-            className="w-full rounded-xl border border-neutral-300 px-4 py-3 text-sm outline-none transition focus:border-neutral-950"
           />
         </div>
 

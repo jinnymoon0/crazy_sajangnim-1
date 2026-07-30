@@ -1,38 +1,63 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import AuthPanel from "@/components/auth/AuthPanel";
-import { getSessionUser } from "@/lib/auth/session";
+import { auth } from "@/auth";
+import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
-  const user = await getSessionUser();
+type LoginPageProps = {
+  searchParams: Promise<{
+    error?: string;
+  }>;
+};
 
-  if (user) {
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const { error } = await searchParams;
+
+  const session = await auth();
+
+  if (session?.user) {
     redirect("/");
   }
 
   return (
     <main className="flex min-h-screen flex-col items-center bg-[#f5f2ea] px-4 py-10 text-[#111111]">
-      <Link
-        href="/"
-        className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-neutral-600 transition hover:text-neutral-950"
-      >
-        <span aria-hidden="true">←</span>
-        Back to shopping
-      </Link>
-
-      <h1 className="font-diploma mb-8 text-center text-4xl">
+      <h1 className="font-diploma mb-3 mt-10 text-center text-4xl">
         Crazy Sajangnim
       </h1>
 
-      <AuthPanel />
-
-      <p className="mt-6 max-w-md text-center text-xs leading-5 text-neutral-500">
-        No email is required. Your password and security answer are
-        stored as one-way hashes and can never be read back.
+      <p className="mb-8 max-w-sm text-center text-sm leading-6 text-neutral-600">
+        Sign in with Google to browse designer sales and share clothing
+        finds.
       </p>
+
+      <section className="w-full max-w-md rounded-3xl border border-black/10 bg-white p-6 shadow-sm sm:p-8">
+        {error ? (
+          <p
+            role="status"
+            className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+          >
+            {error === "AccessDenied"
+              ? "Sign-in was not completed. Please try again — if the problem continues, the site's account setup may be incomplete."
+              : "Sign-in failed. Please try again."}
+          </p>
+        ) : null}
+
+        <GoogleSignInButton />
+
+        <p className="mt-4 text-center text-xs leading-5 text-neutral-500">
+          First time here? After signing in you will pick a username —
+          in any language — that appears on your posts and comments.
+        </p>
+      </section>
+
+      <Link
+        href="/"
+        className="mt-8 text-sm text-neutral-500 underline transition hover:text-neutral-950"
+      >
+        Back
+      </Link>
     </main>
   );
 }
