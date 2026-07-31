@@ -1,0 +1,2713 @@
+=== PRODUCTS API 400-1250 ===
+   * Require the requested brand in the title or URL.
+   * Do not accept a result merely because its snippet
+   * mentions the brand among many unrelated brands.
+   */
+  return (
+    title.includes(englishName) ||
+    title.includes(koreanName) ||
+    title.includes(slugName) ||
+    url.includes(slugName.replace(/ /g, "")) ||
+    url.includes(englishName.replace(/ /g, ""))
+  );
+}
+
+function isBlockedResultUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+
+    if (
+      BLOCKED_DIRECT_RETAILER_DOMAINS.some(
+        (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+      )
+    ) {
+      return true;
+    }
+    const pathAndQuery = `${url.pathname}${url.search}`.toLowerCase();
+
+    if (
+      BLOCKED_RESULT_DOMAINS.some(
+        (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+      )
+    ) {
+      return true;
+    }
+
+    return BLOCKED_PRODUCT_URL_TERMS.some((term) =>
+      pathAndQuery.includes(term.toLowerCase()),
+    );
+  } catch {
+    return true;
+  }
+}
+
+function isReasonablePrice(price: number, market: Market): boolean {
+  if (!Number.isFinite(price)) {
+    return false;
+  }
+
+  return market === "KR"
+    ? price >= 10_000 && price <= 20_000_000
+    : price >= 20 && price <= 50_000;
+}
+
+function normalizeProduct(
+  result: SearxngResult,
+  brand: BrandSearch,
+  market: Market,
+  requestedGender: Exclude<Gender, "UNISEX">,
+): Product | null {
+  const title = result.title.trim();
+  const sourceUrl = result.url.trim();
+
+  if (isBlockedResultUrl(sourceUrl)) {
+    return null;
+  }
+
+  if (!resultExplicitlyMatchesBrand(result, brand)) {
+    return null;
+  }
+  const imageUrl = getImageUrl(result) ?? "/product-placeholder.svg";
+
+  const text = getResultText(result);
+
+  if (!title || !sourceUrl) {
+    return null;
+  }
+
+  /*
+   * Every result was discovered through a sale-specific query.
+   * Search-engine snippets do not always repeat the words
+   * "sale", "discount", or "clearance", so do not reject a
+   * result solely because the snippet omits those terms.
+   */
+  if (isSecondHandResult(text)) {
+    return null;
+  }
+
+  const detectedBrand = inferBrand(text);
+
+  if (!detectedBrand || detectedBrand.slug !== brand.slug) {
+    return null;
+  }
+
+  const verifiedPrices = resolveSalePrices(text, market);
+
+  const fallbackSalePrice = verifiedPrices
+    ? null
+    : resolveSingleSalePrice(text, market);
+
+  if (!verifiedPrices && !fallbackSalePrice) {
+    return null;
+  }
+
+  const salePrice = verifiedPrices?.salePrice ?? fallbackSalePrice;
+
+  if (!salePrice || !isReasonablePrice(salePrice, market)) {
+    return null;
+  }
+
+  return {
+    id: createProductId(result),
+
+    sourceName: getSourceName(result),
+    sourceUrl,
+
+    market,
+    currency: market === "KR" ? "KRW" : "USD",
+
+    gender: requestedGender,
+
+    brandSlug: detectedBrand.slug,
+    brandName: detectedBrand.name,
+
+    productName: title,
+    categorySlug: inferCategory(text),
+
+    imageUrl,
+
+    originalPrice: verifiedPrices?.originalPrice ?? null,
+
+    salePrice,
+
+    discountPercentage: verifiedPrices?.discountPercentage ?? null,
+
+    /*
+     * Snippet-derived pairs take the lowest and highest prices mentioned in
+     * a search result, which routinely mixes unrelated products. Treat every
+     * snippet price as an estimate; only page-level structured data or a
+     * direct retailer feed may produce VERIFIED prices.
+     */
+    saleVerification: "UNVERIFIED",
+
+    isAvailable: true,
+    collectedAt: new Date().toISOString(),
+  };
+}
+
+function createRetailerQueries(
+  brand: BrandSearch,
+  gender: Exclude<Gender, "UNISEX">,
+): string[] {
+  const genderTerm =
+    gender === "MEN"
+      ? '(men OR mens OR menswear OR "men\'s")'
+      : '(women OR womens OR womenswear OR "women\'s" OR female)';
+
+  const preferredDomains = [
+    "ssense.com",
+    "farfetch.com",
+    "yoox.com",
+    "modesens.com",
+    "endclothing.com",
+    "shopneighbour.com",
+    "tres-bien.com",
+    "svrn.com",
+    "mytheresa.com",
+    "net-a-porter.com",
+    "24s.com",
+    "luisaviaroma.com",
+    "ln-cc.com",
+    "slamjam.com",
+    "havenshop.com",
+    "canoeclub.us",
+    "shoplostfound.com",
+    "norsestore.com",
+    "goodhoodstore.com",
+  ];
+
+  return preferredDomains.map((domain) =>
+    [
+      `site:${domain}`,
+      `"${brand.englishName}"`,
+      genderTerm,
+      "(sale OR clearance OR discount)",
+      '("$" OR "sale price" OR "regular price")',
+      "-used",
+      "-resale",
+      "-preowned",
+    ].join(" "),
+  );
+}
+
+function createDirectRetailerQueries(
+  brand: BrandSearch,
+  gender: Exclude<Gender, "UNISEX">,
+): string[] {
+  const genderTerms =
+    gender === "MEN"
+      ? '(men OR mens OR menswear OR "men\'s")'
+      : '(women OR womens OR womenswear OR "women\'s" OR female)';
+
+  const domains = [
+    "lyst.com",
+    "lyst.co.uk",
+    "farfetch.com",
+    "ssense.com",
+    "endclothing.com",
+    "yoox.com",
+    "modesens.com",
+    "hbx.com",
+    "mrporter.com",
+    "shopneighbour.com",
+    "svrn.com",
+    "tres-bien.com",
+    "italist.com",
+    "cettire.com",
+    "giglio.com",
+    "vitkac.com",
+    "24s.com",
+    "mytheresa.com",
+    "net-a-porter.com",
+    "nordstrom.com",
+    "saksfifthavenue.com",
+    "bergdorfgoodman.com",
+    "harrods.com",
+    "libertylondon.com",
+    "ln-cc.com",
+    "matchesfashion.com",
+    "luisaviaroma.com",
+    "brownsfashion.com",
+    "thewebster.com",
+    "wrongweather.net",
+    "slamjam.com",
+    "bstn.com",
+    "feature.com",
+    "bodega.com",
+    "unionlosangeles.com",
+    "canoeclub.us",
+    "bluebuttonshop.com",
+    "shoplostfound.com",
+    "havenshop.com",
+    "gravitypope.com",
+    "goodhoodstore.com",
+    "couvertureandthegarbstore.com",
+    "norsestore.com",
+    "ssense.com",
+    "shopbop.com",
+    "revolve.com",
+  ];
+
+  return domains.map((domain) =>
+    [
+      `site:${domain}`,
+      `"${brand.englishName}"`,
+      genderTerms,
+      "(sale OR discount OR clearance OR markdown)",
+      "-used",
+      "-resale",
+      "-preowned",
+    ].join(" "),
+  );
+}
+
+function createCategoryQueries(
+  brand: BrandSearch,
+  market: Market,
+  gender: Exclude<Gender, "UNISEX">,
+): string[] {
+  if (market === "KR") {
+    const genderTerms =
+      gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)";
+
+    const categories = [
+      "자켓 코트 블레이저",
+      "셔츠 블라우스 티셔츠",
+      "니트 스웨터 가디건 베스트",
+      "팬츠 바지 데님 청바지",
+      "스커트 원피스 드레스",
+      "신발 스니커즈 부츠 샌들",
+      "가방 토트백 숄더백",
+      "모자 벨트 지갑 액세서리",
+    ];
+
+    return categories.map((category) =>
+      [
+        `("${brand.englishName}" OR "${brand.koreanName}")`,
+        genderTerms,
+        `(${category})`,
+        "(세일 OR 할인 OR 시즌오프 OR 아울렛)",
+        "-중고",
+        "-리셀",
+      ].join(" "),
+    );
+  }
+
+  const genderTerms =
+    gender === "MEN"
+      ? '(men OR mens OR menswear OR "men\'s")'
+      : '(women OR womens OR womenswear OR "women\'s" OR female)';
+
+  const categories = [
+    "(jacket OR coat OR blazer OR outerwear)",
+    "(shirt OR blouse OR t-shirt OR polo OR top)",
+    "(sweater OR knitwear OR cardigan OR vest)",
+    "(pants OR trousers OR jeans OR shorts)",
+    "(skirt OR dress OR gown)",
+    "(shoes OR sneakers OR boots OR sandals OR loafers)",
+    "(bag OR tote OR shoulder bag OR backpack)",
+    "(hat OR belt OR wallet OR scarf OR accessories)",
+  ];
+
+  return categories.map((category) =>
+    [
+      `"${brand.englishName}"`,
+      genderTerms,
+      category,
+      "(sale OR clearance OR discount OR markdown)",
+      '("$" OR "sale price" OR "regular price")',
+      "-used",
+      "-resale",
+      "-preowned",
+    ].join(" "),
+  );
+}
+
+function createKoreanRetailerQueries(
+  brand: BrandSearch,
+  gender: Exclude<Gender, "UNISEX">,
+): string[] {
+  const genderTerms =
+    gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)";
+
+  const domains = [
+    "musinsa.com",
+    "29cm.co.kr",
+    "wconcept.co.kr",
+    "ssfshop.com",
+    "lfmall.co.kr",
+    "hanstyle.com",
+    "trenbe.com",
+    "mustit.co.kr",
+    "balaan.co.kr",
+    "lotteon.com",
+    "ssg.com",
+    "galleria.co.kr",
+    "thehyundai.com",
+    "shinsegaemall.ssg.com",
+    "kream.co.kr",
+    "empty.seoul.kr",
+    "8division.com",
+    "beakerstore.com",
+    "worksout.co.kr",
+    "kasina.co.kr",
+    "boon-shop.com",
+    "eqlstore.com",
+    "hago.kr",
+    "ocokorea.com",
+  ];
+
+  return domains.map((domain) =>
+    [
+      `site:${domain}`,
+      `("${brand.englishName}" OR "${brand.koreanName}")`,
+      genderTerms,
+      "(세일 OR 할인 OR 시즌오프 OR 아울렛 OR 특가)",
+      '("판매가" OR "할인가" OR "정가" OR "원")',
+      "-중고",
+      "-리셀",
+    ].join(" "),
+  );
+}
+
+function createWomenProductQueries(brand: BrandSearch): string[] {
+  const categories = [
+    "dress",
+    "skirt",
+    "blouse",
+    "women jacket",
+    "women trousers",
+    "women sweater",
+    "women shirt",
+    "women shoes",
+    "women bag",
+    "women accessories",
+  ];
+
+  const domains = [
+    "lyst.com",
+    "farfetch.com",
+    "ssense.com",
+    "yoox.com",
+    "modesens.com",
+    "mytheresa.com",
+    "net-a-porter.com",
+    "24s.com",
+    "shopbop.com",
+    "revolve.com",
+    "luisaviaroma.com",
+    "cettire.com",
+  ];
+
+  return domains.flatMap((domain) =>
+    categories.map((category) =>
+      [
+        `site:${domain}`,
+        `"${brand.englishName}"`,
+        `"${category}"`,
+        "(sale OR discount OR clearance OR markdown)",
+        "-used",
+        "-resale",
+        "-preowned",
+      ].join(" "),
+    ),
+  );
+}
+
+function createSearchQueries(
+  brand: BrandSearch,
+  market: Market,
+  gender: Exclude<Gender, "UNISEX">,
+): string[] {
+  const baseQuery = createQuery(brand, market, gender);
+
+  if (market === "KR") {
+    return [
+      baseQuery,
+      ...createCategoryQueries(brand, market, gender),
+      ...createKoreanRetailerQueries(brand, gender),
+      [
+        `("${brand.englishName}" OR "${brand.koreanName}")`,
+        gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)",
+        "(세일 OR 할인 OR 시즌오프 OR 아울렛)",
+        '("판매가" OR "할인가" OR "정가" OR "원")',
+        "-중고",
+        "-리셀",
+      ].join(" "),
+      [
+        `("${brand.englishName}" OR "${brand.koreanName}")`,
+        gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)",
+        '("판매가" OR "할인가")',
+        "(자켓 OR 셔츠 OR 팬츠 OR 니트 OR 신발 OR 가방)",
+        "-컬렉션",
+        "-중고",
+        "-리셀",
+      ].join(" "),
+    ];
+  }
+
+  return [
+    baseQuery,
+    ...createCategoryQueries(brand, market, gender),
+    ...(gender === "WOMEN" ? createWomenProductQueries(brand) : []),
+    ...createDirectRetailerQueries(brand, gender),
+    ...createRetailerQueries(brand, gender),
+    [
+      `"${brand.englishName}"`,
+      gender === "MEN" ? "(men OR mens)" : "(women OR womens)",
+      "(sale OR clearance OR discount OR outlet)",
+      '("sale price" OR "regular price" OR "original price" OR "$")',
+      "-used",
+      "-resale",
+      "-preowned",
+    ].join(" "),
+    [
+      `"${brand.englishName}"`,
+      gender === "MEN" ? "(men OR mens)" : "(women OR womens)",
+      '("sale price" OR "regular price")',
+      "(jacket OR shirt OR pants OR sweater OR shoes OR bag)",
+      "-collection",
+      "-used",
+      "-resale",
+      "-preowned",
+    ].join(" "),
+  ];
+}
+
+async function searchAdditionalBrandPage(
+  brand: BrandSearch,
+  market: Market,
+  gender: Exclude<Gender, "UNISEX">,
+): Promise<SearxngResult[]> {
+  try {
+    const response = await searchSearxng(createQuery(brand, market, gender), {
+      language: market === "KR" ? "ko-KR" : "en-US",
+      page: 4,
+    });
+
+    return response.results;
+  } catch {
+    return [];
+  }
+}
+
+async function searchBrand(
+  brand: BrandSearch,
+  market: Market,
+  gender: Exclude<Gender, "UNISEX">,
+): Promise<BrandSearchResult> {
+  const collectedResults: SearxngResult[] = [];
+  const unresponsiveEngines: Array<[string, string]> = [];
+  const errors: string[] = [];
+
+  const queries = createSearchQueries(brand, market, gender);
+
+  for (const [queryIndex, query] of queries.entries()) {
+    const pages = queryIndex < 7 ? [1, 2, 3, 4, 5, 6, 7, 8] : [1, 2];
+
+    for (const page of pages) {
+      try {
+        const response = await searchSearxng(query, {
+          language: market === "KR" ? "ko-KR" : "en-US",
+          page,
+        });
+
+        collectedResults.push(...response.results);
+
+        unresponsiveEngines.push(...response.unresponsiveEngines);
+      } catch (error) {
+        errors.push(
+          error instanceof Error ? error.message : "Unknown SearXNG error",
+        );
+      }
+    }
+  }
+
+  let uniqueResults = Array.from(
+    new Map(collectedResults.map((result) => [result.url, result])).values(),
+  );
+
+  const fallbackProducts = uniqueResults
+    .map((result) => normalizeProduct(result, brand, market, gender))
+    .filter((product): product is Product => product !== null);
+
+  if (uniqueResults.length < 35) {
+    const additionalResults = await searchAdditionalBrandPage(
+      brand,
+      market,
+      gender,
+    );
+
+    uniqueResults = Array.from(
+      new Map(
+        [...uniqueResults, ...additionalResults].map((result) => [
+          result.url,
+          result,
+        ]),
+      ).values(),
+    );
+  }
+
+  const pageCandidates = uniqueResults.filter((result) => {
+    const text = getResultText(result);
+
+    return (
+      resultExplicitlyMatchesBrand(result, brand) && !isSecondHandResult(text)
+    );
+  });
+
+  const pageLimit = pLimit(8);
+
+  const settledPages = await Promise.allSettled(
+    pageCandidates.map((result) =>
+      pageLimit(() =>
+        extractProductsFromPage({
+          pageUrl: result.url,
+          market,
+          requestedGender: gender,
+          brandSlug: brand.slug,
+          brandName: brand.englishName,
+          maxProducts: 150,
+        }),
+      ),
+    ),
+  );
+
+  const extractedProducts = settledPages.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : [],
+  );
+
+  const products = Array.from(
+    new Map(
+      [...extractedProducts, ...fallbackProducts].map((product) => [
+        [product.sourceUrl, product.productName, product.salePrice].join("|"),
+        product,
+      ]),
+    ).values(),
+  );
+
+  const uniqueEngineErrors = Array.from(
+    new Map(
+      unresponsiveEngines.map((engineError) => [
+        engineError.join("|"),
+        engineError,
+      ]),
+    ).values(),
+  );
+
+  /*
+   * Return every validated and deduplicated product.
+   * Accuracy checks still occur before this point.
+   */
+
+  const diagnostics: BrandSearchDiagnostics = {
+    explicitBrandMatches: uniqueResults.filter((result) =>
+      resultExplicitlyMatchesBrand(result, brand),
+    ).length,
+
+    resultsWithImages: uniqueResults.filter(
+      (result) => getImageUrl(result) !== null,
+    ).length,
+
+    resultsWithPrices: uniqueResults.filter((result) => {
+      const text = getResultText(result);
+
+      return (
+        resolveSalePrices(text, market) !== null ||
+        resolveSingleSalePrice(text, market) !== null
+      );
+    }).length,
+
+    resultsWithSaleTerms: uniqueResults.filter((result) =>
+      containsSaleTerm(getResultText(result)),
+    ).length,
+
+    secondHandResults: uniqueResults.filter((result) =>
+      isSecondHandResult(getResultText(result)),
+    ).length,
+
+    pageCandidates: pageCandidates.length,
+    extractedProducts: extractedProducts.length,
+    fallbackProducts: fallbackProducts.length,
+  };
+
+  return {
+    products,
+    rawCount: uniqueResults.length,
+    unresponsiveEngines: uniqueEngineErrors,
+    diagnostics,
+    error:
+      uniqueResults.length === 0 && errors.length > 0 ? errors[0] : undefined,
+  };
+}
+
+export async function GET(request: NextRequest) {
+  const marketParameter = request.nextUrl.searchParams.get("market");
+
+  const genderParameter = request.nextUrl.searchParams.get("gender");
+
+  const debug = request.nextUrl.searchParams.get("debug") === "true";
+
+  const directOnly = request.nextUrl.searchParams.get("mode") === "direct";
+
+  const market: Market = isMarket(marketParameter) ? marketParameter : "US";
+
+  const gender: Exclude<Gender, "UNISEX"> = isRequestedGender(genderParameter)
+    ? genderParameter
+    : "MEN";
+
+  if (!directOnly && !process.env.SEARXNG_URL?.trim()) {
+    return NextResponse.json(
+      {
+        error: "SEARXNG_URL is missing.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+
+  /*
+   * Crawl retailer catalogs directly first. Persist immediately so the
+   * verified products survive even if the slower search-engine phase
+   * times out on the serverless runtime.
+   */
+  let directProducts: Product[] = [];
+  let directSavedCount = 0;
+  let directPersistenceError: string | null = null;
+
+  try {
+    directProducts = await collectDirectProducts(market);
+  } catch (error) {
+    console.error("Direct source collection failed:", error);
+  }
+
+  if (directProducts.length > 0) {
+    try {
+      directSavedCount = await upsertProducts(directProducts);
+    } catch (error) {
+      directPersistenceError =
+        error instanceof Error
+          ? error.message
+          : "Unable to save direct source products.";
+
+      console.error("Direct product persistence failed:", error);
+    }
+  }
+
+  const visibleDirectProducts = directProducts.filter(
+    (product) => product.gender === gender || product.gender === "UNISEX",
+  );
+
+  if (directOnly) {
+    return NextResponse.json({
+      products: visibleDirectProducts,
+      count: visibleDirectProducts.length,
+      market,
+      gender,
+      updatedAt: new Date().toISOString(),
+
+      ...(debug
+        ? {
+            diagnostics: {
+              provider: "direct",
+              directCollected: directProducts.length,
+              directSavedCount,
+              directPersistenceError,
+            },
+          }
+        : {}),
+    });
+  }
+
+  const brandLimit = pLimit(2);
+
+  const searchableBrands = BRANDS.filter(
+    (brand) => gender !== "WOMEN" || !MEN_ONLY_BRAND_SLUGS.has(brand.slug),
+  );
+
+  const results = await Promise.all(
+    searchableBrands.map((brand) =>
+      brandLimit(() => searchBrand(brand, market, gender)),
+    ),
+  );
+
+  const allProducts = results.flatMap((result) => result.products);
+
+  const products = Array.from(
+    new Map(
+      allProducts.map((product) => [
+        [product.sourceName, product.productName, product.salePrice].join("|"),
+        product,
+      ]),
+    ).values(),
+  );
+
+  const errors = results
+    .map((result) => result.error)
+    .filter((error): error is string => Boolean(error));
+
+  if (
+    products.length === 0 &&
+    visibleDirectProducts.length === 0 &&
+    errors.length === results.length
+  ) {
+    return NextResponse.json(
+      {
+        error: errors[0] ?? "Unable to retrieve sale listings.",
+      },
+      {
+        status: 502,
+      },
+    );
+  }
+
+  let savedCount = 0;
+  let persistenceError: string | null = null;
+
+  try {
+    savedCount = await upsertProducts(products);
+  } catch (error) {
+    persistenceError =
+      error instanceof Error
+        ? error.message
+        : "Unable to save products to the catalog.";
+
+    console.error("Product catalog persistence failed:", error);
+  }
+
+  const combinedProducts = Array.from(
+    new Map(
+      [...visibleDirectProducts, ...products].map((product) => [
+        [product.sourceName, product.productName, product.salePrice].join("|"),
+        product,
+      ]),
+    ).values(),
+  );
+
+  return NextResponse.json({
+    products: combinedProducts,
+    count: combinedProducts.length,
+    market,
+    gender,
+    updatedAt: new Date().toISOString(),
+
+    ...(debug
+      ? {
+          diagnostics: {
+            provider: "searxng+direct",
+
+            directCollected: directProducts.length,
+            directSavedCount,
+            directPersistenceError,
+
+            brandSearches: searchableBrands.length,
+
+            rawResults: results.reduce(
+              (total, result) => total + result.rawCount,
+              0,
+            ),
+
+            productsBeforeDeduplication: allProducts.length,
+
+            productsAfterDeduplication: products.length,
+
+            savedCount,
+            persistenceError,
+
+            byBrand: searchableBrands.map((brand, index) => ({
+              brand: brand.englishName,
+              rawResults: results[index].rawCount,
+              products: results[index].products.length,
+              rejectionDiagnostics: results[index].diagnostics,
+              error: results[index].error,
+              unresponsiveEngines: results[index].unresponsiveEngines,
+            })),
+          },
+        }
+      : {}),
+  });
+}
+=== DIRECT PRODUCT SOURCES ===
+import type { Market, Product } from "@/types/product";
+
+import { collectCafe24Products } from "./cafe24-search";
+import { collectGarmentoryProducts } from "./garmentory";
+import { collectHbxProducts } from "./hbx";
+import { collectOkmallProducts } from "./okmall";
+import { collectShopifyProducts } from "./shopify";
+import { dedupeProducts } from "./shared";
+
+/*
+ * Crawl retailer catalogs directly instead of discovering pages through a
+ * search engine. Direct endpoints are deterministic, expose the retailer's
+ * own sale/original price pairs (so every product is VERIFIED), and are
+ * immune to search-engine rate limiting.
+ *
+ * Returned products span every gender (including UNISEX, which the catalog
+ * read path shows in both gender segments); callers persist them all.
+ */
+export async function collectDirectProducts(
+  market: Market,
+): Promise<Product[]> {
+  const collectors =
+    market === "KR"
+      ? [collectCafe24Products, collectOkmallProducts]
+      : [collectShopifyProducts, collectGarmentoryProducts, collectHbxProducts];
+
+  const results = await Promise.allSettled(
+    collectors.map((collect) => collect()),
+  );
+
+  for (const result of results) {
+    if (result.status === "rejected") {
+      console.error("Direct source collector failed:", result.reason);
+    }
+  }
+
+  return dedupeProducts(
+    results.flatMap((result) =>
+      result.status === "fulfilled" ? result.value : [],
+    ),
+  );
+}
+import type { Gender, Market, Product } from "@/types/product";
+
+export const DIRECT_SOURCE_USER_AGENT =
+  process.env.COLLECTOR_USER_AGENT ??
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+const WOMEN_KEYWORDS = [
+  "women",
+  "women's",
+  "womens",
+  "womenswear",
+  "woman",
+  "ladies",
+  "female",
+  "여성",
+  "여자",
+  "우먼",
+];
+
+/*
+ * "menswear" is listed explicitly: the plain keywords match whole words
+ * only, so a retailer category like "menswear-jackets" would otherwise
+ * fall through and be treated as unisex — putting men's jackets in
+ * front of shoppers browsing womenswear.
+ */
+const MEN_KEYWORDS = [
+  " men ",
+  " mens ",
+  "men's",
+  "menswear",
+  " man ",
+  "male",
+  "남성",
+  "남자",
+  "맨즈",
+];
+
+/*
+ * Garment types that identify womenswear when the listing carries no
+ * explicit gender wording. "dress" must not match dress shirts, dress
+ * pants, or dress shoes.
+ */
+const WOMEN_GARMENT_PATTERNS = [
+  /\bdress(es)?\b(?!\s+(shirt|shirts|pant|pants|shoe|shoes|sock|socks))/,
+  /\bskirts?\b/,
+  /\bblouses?\b/,
+  /\bgowns?\b/,
+  /\bheeled\b/,
+  /\bheels\b/,
+  /\blingerie\b/,
+  /\bpanties\b/,
+  /\bbodysuits?\b/,
+  /\bbralettes?\b/,
+  /\bcamisoles?\b/,
+  /\bcorsets?\b/,
+  /\bstrapless\b/,
+  /원피스/,
+  /스커트/,
+  /블라우스/,
+];
+
+/*
+ * Unlike inferGender, a direct catalog crawl has no requested gender to fall
+ * back on: the source default may legitimately be UNISEX, which the catalog
+ * read path surfaces in both gender segments.
+ */
+export function resolveGender(text: string, fallback: Gender): Gender {
+  const normalized = ` ${text.toLowerCase().replace(/[/_-]+/g, " ")} `;
+
+  if (WOMEN_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+    return "WOMEN";
+  }
+
+  if (MEN_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+    return "MEN";
+  }
+
+  if (WOMEN_GARMENT_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return "WOMEN";
+  }
+
+  return fallback;
+}
+
+export function isReasonablePrice(price: number, market: Market): boolean {
+  if (!Number.isFinite(price)) {
+    return false;
+  }
+
+  return market === "KR"
+    ? price >= 10_000 && price <= 20_000_000
+    : price >= 20 && price <= 50_000;
+}
+
+export function parseUsdAmount(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const match = value.match(/([\d,]+(?:\.\d{1,2})?)/);
+
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(match[1].replace(/,/g, ""));
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function dedupeProducts(products: Product[]): Product[] {
+  return Array.from(
+    new Map(
+      products.map((product) => [
+        [product.sourceUrl, product.productName, product.salePrice].join("|"),
+        product,
+      ]),
+    ).values(),
+  );
+}
+
+export async function fetchWithTimeout(
+  url: string,
+  init?: {
+    accept?: string;
+    timeoutMs?: number;
+  },
+): Promise<Response> {
+  return fetch(url, {
+    headers: {
+      Accept: init?.accept ?? "application/json",
+      "User-Agent": DIRECT_SOURCE_USER_AGENT,
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(init?.timeoutMs ?? 15_000),
+  });
+}
+import { createHash } from "node:crypto";
+import pLimit from "p-limit";
+
+import { inferBrand } from "@/lib/products/infer-brand";
+import { inferCategory } from "@/lib/products/infer-category";
+import { calculateDiscountPercentage } from "@/lib/utils";
+import type { Gender, Product } from "@/types/product";
+
+import {
+  dedupeProducts,
+  fetchWithTimeout,
+  isReasonablePrice,
+  resolveGender,
+} from "./shared";
+
+interface ShopifyStore {
+  domain: string;
+  defaultGender: Gender;
+}
+
+/*
+ * United States stockists of the tracked brands whose Shopify storefronts
+ * expose the public /products.json catalog endpoint in USD.
+ * Verified empirically before inclusion.
+ */
+const SHOPIFY_STORES: ShopifyStore[] = [
+  { domain: "svrn.com", defaultGender: "UNISEX" },
+  { domain: "mohawkgeneralstore.com", defaultGender: "UNISEX" },
+  { domain: "notre-shop.com", defaultGender: "UNISEX" },
+  { domain: "standardandstrange.com", defaultGender: "MEN" },
+  { domain: "blueowl.us", defaultGender: "MEN" },
+  { domain: "unionlosangeles.com", defaultGender: "MEN" },
+  { domain: "stagprovisions.com", defaultGender: "MEN" },
+  { domain: "snakeoilprovisions.com", defaultGender: "MEN" },
+  { domain: "featuresneakerboutique.com", defaultGender: "MEN" },
+];
+
+const MAX_PAGES_PER_STORE = 24;
+const PAGE_SIZE = 250;
+
+interface ShopifyVariant {
+  price?: string;
+  compare_at_price?: string | null;
+  available?: boolean;
+}
+
+interface ShopifyImage {
+  src?: string;
+}
+
+interface ShopifyProduct {
+  title?: string;
+  handle?: string;
+  vendor?: string;
+  product_type?: string;
+  tags?: string[] | string;
+  variants?: ShopifyVariant[];
+  images?: ShopifyImage[];
+}
+
+/*
+ * Shopify Markets stores geo-localize /products.json prices by requester IP.
+ * USD (and other decimal currencies) arrive as "245.00" while zero-decimal
+ * currencies such as KRW arrive as integer strings like "299100". Accept only
+ * decimal-formatted prices so a crawl from a non-US location cannot save
+ * foreign-currency amounts labeled as USD.
+ */
+function parsePrice(value: string | null | undefined): number | null {
+  if (!value || !/^\d+\.\d{1,2}$/.test(value.trim())) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(value);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function toTagText(tags: ShopifyProduct["tags"]): string {
+  if (Array.isArray(tags)) {
+    return tags.join(" ");
+  }
+
+  return tags ?? "";
+}
+
+function normalizeShopifyProduct(
+  raw: ShopifyProduct,
+  store: ShopifyStore,
+): Product | null {
+  const title = raw.title?.trim();
+  const handle = raw.handle?.trim();
+
+  if (!title || !handle) {
+    return null;
+  }
+
+  const brandText = [raw.vendor, title, raw.product_type]
+    .filter(Boolean)
+    .join(" ");
+
+  const detectedBrand = inferBrand(brandText);
+
+  if (!detectedBrand) {
+    return null;
+  }
+
+  /*
+   * A product is on sale only when the retailer itself publishes a
+   * higher compare-at price for an in-stock variant.
+   */
+  const saleVariants = (raw.variants ?? []).filter((variant) => {
+    if (variant.available === false) {
+      return false;
+    }
+
+    const price = parsePrice(variant.price);
+    const compareAt = parsePrice(variant.compare_at_price ?? null);
+
+    return price !== null && compareAt !== null && compareAt > price;
+  });
+
+  if (saleVariants.length === 0) {
+    return null;
+  }
+
+  const cheapest = saleVariants.reduce((best, variant) =>
+    (parsePrice(variant.price) ?? Infinity) <
+    (parsePrice(best.price) ?? Infinity)
+      ? variant
+      : best,
+  );
+
+  const salePrice = parsePrice(cheapest.price);
+  const originalPrice = parsePrice(cheapest.compare_at_price ?? null);
+
+  if (
+    !salePrice ||
+    !originalPrice ||
+    !isReasonablePrice(salePrice, "US") ||
+    originalPrice <= salePrice
+  ) {
+    return null;
+  }
+
+  const discountPercentage = calculateDiscountPercentage(
+    originalPrice,
+    salePrice,
+  );
+
+  if (discountPercentage <= 0 || discountPercentage >= 90) {
+    return null;
+  }
+
+  const sourceUrl = `https://${store.domain}/products/${handle}`;
+
+  const genderText = [title, raw.product_type, toTagText(raw.tags), handle]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: createHash("sha256")
+      .update([sourceUrl, title, salePrice].join("|"))
+      .digest("hex")
+      .slice(0, 24),
+
+    sourceName: store.domain,
+    sourceUrl,
+
+    market: "US",
+    currency: "USD",
+    gender: resolveGender(genderText, store.defaultGender),
+
+    brandSlug: detectedBrand.slug,
+    brandName: detectedBrand.name,
+
+    productName: title,
+    categorySlug: inferCategory(`${title} ${raw.product_type ?? ""}`),
+
+    imageUrl: raw.images?.[0]?.src ?? "/product-placeholder.svg",
+
+    originalPrice,
+    salePrice,
+    discountPercentage,
+    saleVerification: "VERIFIED",
+
+    isAvailable: true,
+    collectedAt: new Date().toISOString(),
+  };
+}
+
+async function crawlStore(store: ShopifyStore): Promise<Product[]> {
+  const products: Product[] = [];
+
+  for (let page = 1; page <= MAX_PAGES_PER_STORE; page += 1) {
+    let items: ShopifyProduct[];
+
+    try {
+      const response = await fetchWithTimeout(
+        `https://${store.domain}/products.json?limit=${PAGE_SIZE}&page=${page}`,
+      );
+
+      if (!response.ok) {
+        console.warn(
+          `Shopify crawl stopped: ${store.domain} page ${page} returned ${response.status}`,
+        );
+
+        break;
+      }
+
+      const body = (await response.json()) as {
+        products?: ShopifyProduct[];
+      };
+
+      items = body.products ?? [];
+    } catch (error) {
+      console.warn(
+        `Shopify crawl stopped: ${store.domain} page ${page} failed:`,
+        error instanceof Error ? error.message : error,
+      );
+
+      break;
+    }
+
+    if (items.length === 0) {
+      break;
+    }
+
+    for (const item of items) {
+      /*
+       * One malformed listing must not discard the rest of the
+       * store's harvest.
+       */
+      try {
+        const product = normalizeShopifyProduct(item, store);
+
+        if (product) {
+          products.push(product);
+        }
+      } catch (error) {
+        console.warn(
+          `Shopify listing skipped on ${store.domain}:`,
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
+
+    if (items.length < PAGE_SIZE) {
+      break;
+    }
+  }
+
+  return products;
+}
+
+export async function collectShopifyProducts(): Promise<Product[]> {
+  const limit = pLimit(4);
+
+  const results = await Promise.allSettled(
+    SHOPIFY_STORES.map((store) => limit(() => crawlStore(store))),
+  );
+
+  return dedupeProducts(
+    results.flatMap((result) =>
+      result.status === "fulfilled" ? result.value : [],
+    ),
+  );
+}
+import { createHash } from "node:crypto";
+import pLimit from "p-limit";
+
+import { BRANDS } from "@/constants/brands";
+import { inferBrand } from "@/lib/products/infer-brand";
+import { inferCategory } from "@/lib/products/infer-category";
+import { calculateDiscountPercentage } from "@/lib/utils";
+import type { Product } from "@/types/product";
+
+import {
+  dedupeProducts,
+  fetchWithTimeout,
+  isReasonablePrice,
+  parseUsdAmount,
+  resolveGender,
+} from "./shared";
+
+const MAX_PAGES_PER_BRAND = 6;
+
+interface GarmentoryItem {
+  id?: string | number;
+  active?: boolean;
+  name?: string;
+  path?: string;
+  brand?: string;
+  retailPrice?: string;
+  price?: string;
+  isDiscounted?: boolean;
+  hasVaryingPrices?: boolean;
+  store?: string;
+  mainImage?: {
+    largeUrl?: string;
+  };
+}
+
+interface GarmentoryResponse {
+  resultsData?: {
+    products?: GarmentoryItem[];
+  };
+  paginationData?: {
+    totalPages?: number;
+    hasNextPage?: boolean;
+  };
+}
+
+function normalizeItem(item: GarmentoryItem): Product | null {
+  const name = item.name?.trim();
+  const path = item.path?.trim();
+
+  if (!name || !path || item.active === false || !item.isDiscounted) {
+    return null;
+  }
+
+  /*
+   * When the price differs per size, the listing price does not match what
+   * the product page shows for every option — skip to avoid apparent
+   * price errors.
+   */
+  if (item.hasVaryingPrices) {
+    return null;
+  }
+
+  const detectedBrand = inferBrand(`${item.brand ?? ""} ${name}`);
+
+  if (!detectedBrand) {
+    return null;
+  }
+
+  const salePrice = parseUsdAmount(item.price);
+  const originalPrice = parseUsdAmount(item.retailPrice);
+
+  if (
+    !salePrice ||
+    !originalPrice ||
+    originalPrice <= salePrice ||
+    !isReasonablePrice(salePrice, "US")
+  ) {
+    return null;
+  }
+
+  const discountPercentage = calculateDiscountPercentage(
+    originalPrice,
+    salePrice,
+  );
+
+  if (discountPercentage <= 0 || discountPercentage >= 90) {
+    return null;
+  }
+
+  const sourceUrl = `https://www.garmentory.com${path}`;
+
+  return {
+    id: createHash("sha256")
+      .update([sourceUrl, name, salePrice].join("|"))
+      .digest("hex")
+      .slice(0, 24),
+
+    sourceName: item.store?.trim()
+      ? `garmentory.com · ${item.store.trim()}`
+      : "garmentory.com",
+    sourceUrl,
+
+    market: "US",
+    currency: "USD",
+
+    /*
+     * Garmentory paths encode gender, e.g.
+     * /sale/lemaire/mens-slip-on/... or /sale/lemaire/womens-dresses/...
+     */
+    gender: resolveGender(`${path} ${name}`, "UNISEX"),
+
+    brandSlug: detectedBrand.slug,
+    brandName: detectedBrand.name,
+
+    productName: name,
+    categorySlug: inferCategory(`${name} ${path}`),
+
+    imageUrl: item.mainImage?.largeUrl ?? "/product-placeholder.svg",
+
+    originalPrice,
+    salePrice,
+    discountPercentage,
+    saleVerification: "VERIFIED",
+
+    isAvailable: true,
+    collectedAt: new Date().toISOString(),
+  };
+}
+
+async function crawlBrand(englishName: string): Promise<Product[]> {
+  const products: Product[] = [];
+
+  /*
+   * The /sale/<brand> feed is brand-exact and sale-biased, unlike the fuzzy
+   * /search?q= endpoint that mixes in other designers.
+   */
+  const permalink = englishName.toLowerCase().replace(/\s+/g, "-");
+
+  let previousFirstId: GarmentoryItem["id"] | null = null;
+
+  for (let page = 1; page <= MAX_PAGES_PER_BRAND; page += 1) {
+    let body: GarmentoryResponse;
+
+    try {
+      const response = await fetchWithTimeout(
+        `https://www.garmentory.com/sale/${permalink}?page=${page}`,
+      );
+
+      if (!response.ok) {
+        break;
+      }
+
+      body = (await response.json()) as GarmentoryResponse;
+    } catch {
+      break;
+    }
+
+    const items = body.resultsData?.products ?? [];
+
+    if (items.length === 0) {
+      break;
+    }
+
+    /*
+     * Pages beyond the last one repeat their content instead of coming back
+     * empty; stop once pagination stops advancing.
+     */
+    if (items[0]?.id !== undefined && items[0].id === previousFirstId) {
+      break;
+    }
+
+    previousFirstId = items[0]?.id ?? null;
+
+    for (const item of items) {
+      const product = normalizeItem(item);
+
+      if (product) {
+        products.push(product);
+      }
+    }
+
+    if (body.paginationData?.hasNextPage === false) {
+      break;
+    }
+  }
+
+  return products;
+}
+
+export async function collectGarmentoryProducts(): Promise<Product[]> {
+  const limit = pLimit(3);
+
+  const results = await Promise.allSettled(
+    BRANDS.map((brand) => limit(() => crawlBrand(brand.englishName))),
+  );
+
+  return dedupeProducts(
+    results.flatMap((result) =>
+      result.status === "fulfilled" ? result.value : [],
+    ),
+  );
+}
+import { createHash } from "node:crypto";
+import pLimit from "p-limit";
+
+import { BRANDS } from "@/constants/brands";
+import { inferBrand } from "@/lib/products/infer-brand";
+import { inferCategory } from "@/lib/products/infer-category";
+import { calculateDiscountPercentage } from "@/lib/utils";
+import type { Product } from "@/types/product";
+
+import {
+  dedupeProducts,
+  fetchWithTimeout,
+  isReasonablePrice,
+  resolveGender,
+} from "./shared";
+
+const MAX_PAGES_PER_BRAND = 3;
+
+interface HbxItem {
+  id?: number | string;
+  code?: string;
+  name?: string;
+  brands?: Array<{
+    name?: string;
+    code?: string;
+  }>;
+  [key: string]: unknown;
+}
+
+interface HbxResponse {
+  pagination?: {
+    items?: HbxItem[];
+    pages?: number;
+    page?: number;
+  };
+}
+
+interface PriceCandidate {
+  key: string;
+  value: number;
+}
+
+/*
+ * HBX search items carry price fields whose exact names are not part of a
+ * stable public contract. Collect every numeric field whose key mentions a
+ * price, then require an explicit original/list style key above the lowest
+ * price before treating the listing as a verified sale.
+ */
+function collectPriceCandidates(
+  value: unknown,
+  keyPath: string,
+  bucket: PriceCandidate[],
+): void {
+  if (bucket.length > 24) {
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      collectPriceCandidates(entry, keyPath, bucket);
+    }
+
+    return;
+  }
+
+  if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      collectPriceCandidates(child, `${keyPath}.${key}`.toLowerCase(), bucket);
+    }
+
+    return;
+  }
+
+  if (!/price|msrp/.test(keyPath)) {
+    return;
+  }
+
+  const numeric =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseFloat(value.replace(/[^0-9.]/g, ""))
+        : Number.NaN;
+
+  if (Number.isFinite(numeric) && numeric > 0) {
+    bucket.push({ key: keyPath, value: numeric });
+  }
+}
+
+function resolveHbxPrices(item: HbxItem): {
+  salePrice: number;
+  originalPrice: number;
+} | null {
+  const candidates: PriceCandidate[] = [];
+
+  collectPriceCandidates(item, "", candidates);
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const originalCandidates = candidates.filter((candidate) =>
+    /original|regular|list|retail|compare|was|msrp|strike/.test(candidate.key),
+  );
+
+  const saleCandidates = candidates.filter(
+    (candidate) => !originalCandidates.includes(candidate),
+  );
+
+  if (originalCandidates.length === 0 || saleCandidates.length === 0) {
+    return null;
+  }
+
+  const salePrice = Math.min(
+    ...saleCandidates.map((candidate) => candidate.value),
+  );
+
+  const originalPrice = Math.max(
+    ...originalCandidates.map((candidate) => candidate.value),
+  );
+
+  if (originalPrice <= salePrice) {
+    return null;
+  }
+
+  return { salePrice, originalPrice };
+}
+
+function normalizeItem(item: HbxItem): Product | null {
+  const name = item.name?.trim();
+  const code = typeof item.code === "string" ? item.code.trim() : "";
+
+  if (!name || !code) {
+    return null;
+  }
+
+  const brandNames = (item.brands ?? [])
+    .map((brand) => brand.name ?? brand.code ?? "")
+    .join(" ");
+
+  const detectedBrand = inferBrand(`${brandNames} ${name}`);
+
+  if (!detectedBrand) {
+    return null;
+  }
+
+  const prices = resolveHbxPrices(item);
+
+  if (!prices || !isReasonablePrice(prices.salePrice, "US")) {
+    return null;
+  }
+
+  const discountPercentage = calculateDiscountPercentage(
+    prices.originalPrice,
+    prices.salePrice,
+  );
+
+  if (discountPercentage <= 0 || discountPercentage >= 90) {
+    return null;
+  }
+
+  const sourceUrl = `https://hbx.com/products/${code}`;
+
+  const genderText = JSON.stringify(item.brands ?? "").includes("/women")
+    ? "women"
+    : JSON.stringify(item).includes("/women/")
+      ? "women"
+      : JSON.stringify(item).includes("/men/")
+        ? "men"
+        : "";
+
+  return {
+    id: createHash("sha256")
+      .update([sourceUrl, name, prices.salePrice].join("|"))
+      .digest("hex")
+      .slice(0, 24),
+
+    sourceName: "hbx.com",
+    sourceUrl,
+
+    market: "US",
+    currency: "USD",
+    gender: resolveGender(`${genderText} ${name}`, "UNISEX"),
+
+    brandSlug: detectedBrand.slug,
+    brandName: detectedBrand.name,
+
+    productName: name,
+    categorySlug: inferCategory(name),
+
+    imageUrl: "/product-placeholder.svg",
+
+    originalPrice: prices.originalPrice,
+    salePrice: prices.salePrice,
+    discountPercentage,
+    saleVerification: "VERIFIED",
+
+    isAvailable: true,
+    collectedAt: new Date().toISOString(),
+  };
+}
+
+async function crawlBrand(englishName: string): Promise<Product[]> {
+  const products: Product[] = [];
+
+  for (let page = 1; page <= MAX_PAGES_PER_BRAND; page += 1) {
+    let body: HbxResponse;
+
+    try {
+      const response = await fetchWithTimeout(
+        `https://hbx.com/search?q=${encodeURIComponent(
+          englishName.toLowerCase(),
+        )}&page=${page}`,
+      );
+
+      if (!response.ok) {
+        break;
+      }
+
+      body = (await response.json()) as HbxResponse;
+    } catch {
+      break;
+    }
+
+    const items = body.pagination?.items ?? [];
+
+    if (items.length === 0) {
+      break;
+    }
+
+    for (const item of items) {
+      const product = normalizeItem(item);
+
+      if (product) {
+        products.push(product);
+      }
+    }
+
+    const { page: currentPage, pages } = body.pagination ?? {};
+
+    if (currentPage !== undefined && pages !== undefined && currentPage >= pages) {
+      break;
+    }
+  }
+
+  return products;
+}
+
+export async function collectHbxProducts(): Promise<Product[]> {
+  const limit = pLimit(3);
+
+  const results = await Promise.allSettled(
+    BRANDS.map((brand) => limit(() => crawlBrand(brand.englishName))),
+  );
+
+  return dedupeProducts(
+    results.flatMap((result) =>
+      result.status === "fulfilled" ? result.value : [],
+    ),
+  );
+}
+import { createHash } from "node:crypto";
+import * as cheerio from "cheerio";
+import pLimit from "p-limit";
+
+import { BRANDS } from "@/constants/brands";
+import { inferBrand } from "@/lib/products/infer-brand";
+import { inferCategory } from "@/lib/products/infer-category";
+import { calculateDiscountPercentage } from "@/lib/utils";
+import type { Product } from "@/types/product";
+
+import {
+  dedupeProducts,
+  fetchWithTimeout,
+  isReasonablePrice,
+  resolveGender,
+} from "./shared";
+
+const BASE_URL = "https://www.okmall.com";
+const MAX_PAGES_PER_BRAND = 3;
+
+function parseKrwAmount(text: string): number | null {
+  const match = text.replace(/\s+/g, " ").match(/([\d,]{4,})/);
+
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(match[1].replace(/,/g, ""), 10);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function absoluteUrl(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value, BASE_URL).toString();
+  } catch {
+    return null;
+  }
+}
+
+function parseListPage(html: string): Product[] {
+  const $ = cheerio.load(html);
+  const products: Product[] = [];
+
+  $(".item_box").each((_, element) => {
+    const card = $(element);
+
+    const title = card
+      .find(".item_title")
+      .first()
+      .text()
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!title) {
+      return;
+    }
+
+    const detectedBrand = inferBrand(title);
+
+    if (!detectedBrand) {
+      return;
+    }
+
+    /*
+     * OK Mall lists a struck-through original price (.orgin_price) next to
+     * the selling price. Use .okmall_price — the price the product page
+     * itself displays. .sale_price is a coupon/membership price that does
+     * not match the page, which read as a price error to visitors.
+     */
+    const originalPrice = parseKrwAmount(
+      card.find(".orgin_price").first().text(),
+    );
+
+    const salePrice =
+      parseKrwAmount(card.find(".okmall_price").first().text()) ??
+      parseKrwAmount(card.find(".sale_price").first().text());
+
+    if (
+      !originalPrice ||
+      !salePrice ||
+      originalPrice <= salePrice ||
+      !isReasonablePrice(salePrice, "KR")
+    ) {
+      return;
+    }
+
+    const discountPercentage = calculateDiscountPercentage(
+      originalPrice,
+      salePrice,
+    );
+
+    if (discountPercentage <= 0 || discountPercentage >= 90) {
+      return;
+    }
+
+    const href = card.find("a[href]").first().attr("href");
+    const sourceUrl = absoluteUrl(href);
+
+    if (!sourceUrl) {
+      return;
+    }
+
+    const image = card.find(".item_img img, img").first();
+
+    const imageUrl =
+      absoluteUrl(image.attr("data-original") ?? image.attr("src")) ??
+      "/product-placeholder.svg";
+
+    products.push({
+      id: createHash("sha256")
+        .update([sourceUrl, title, salePrice].join("|"))
+        .digest("hex")
+        .slice(0, 24),
+
+      sourceName: "okmall.com",
+      sourceUrl,
+
+      market: "KR",
+      currency: "KRW",
+      gender: resolveGender(card.text(), "UNISEX"),
+
+      brandSlug: detectedBrand.slug,
+      brandName: detectedBrand.name,
+
+      productName: title,
+      categorySlug: inferCategory(title),
+
+      imageUrl,
+
+      originalPrice,
+      salePrice,
+      discountPercentage,
+      saleVerification: "VERIFIED",
+
+      isAvailable: true,
+      collectedAt: new Date().toISOString(),
+    });
+  });
+
+  return products;
+}
+
+async function crawlBrand(englishName: string): Promise<Product[]> {
+  const products: Product[] = [];
+  let previousFirstUrl: string | null = null;
+
+  for (let page = 1; page <= MAX_PAGES_PER_BRAND; page += 1) {
+    let html: string;
+
+    try {
+      const response = await fetchWithTimeout(
+        `${BASE_URL}/products/list?search_word=${encodeURIComponent(
+          englishName,
+        )}&page=${page}`,
+        {
+          accept: "text/html,application/xhtml+xml",
+          timeoutMs: 20_000,
+        },
+      );
+
+      if (!response.ok) {
+        break;
+      }
+
+      html = await response.text();
+    } catch {
+      break;
+    }
+
+    const pageProducts = parseListPage(html);
+
+    if (pageProducts.length === 0) {
+      break;
+    }
+
+    /*
+     * Some list endpoints ignore the page parameter and repeat page one;
+     * stop as soon as pagination stops advancing.
+     */
+    if (pageProducts[0].sourceUrl === previousFirstUrl) {
+      break;
+    }
+
+    previousFirstUrl = pageProducts[0].sourceUrl;
+    products.push(...pageProducts);
+  }
+
+  return products;
+}
+
+export async function collectOkmallProducts(): Promise<Product[]> {
+  const limit = pLimit(2);
+
+  const results = await Promise.allSettled(
+    BRANDS.map((brand) => limit(() => crawlBrand(brand.englishName))),
+  );
+
+  return dedupeProducts(
+    results.flatMap((result) =>
+      result.status === "fulfilled" ? result.value : [],
+    ),
+  );
+}
+=== REPOSITORY AND CATALOG API ===
+import { createHash } from "node:crypto";
+
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import type { Gender, Market, Product, ProductSort } from "@/types/product";
+
+const PRODUCT_TABLE = "product_catalog";
+
+interface ProductCatalogRow {
+  product_key: string;
+
+  market: Market;
+  currency: Product["currency"];
+  gender: Gender;
+
+  brand_slug: Product["brandSlug"];
+  brand_name: string;
+
+  product_name: string;
+  category_slug: Product["categorySlug"];
+
+  source_name: string;
+  source_url: string;
+  image_url: string;
+
+  original_price: number | null;
+  sale_price: number;
+  discount_percentage: number | null;
+
+  sale_verification: Product["saleVerification"];
+  is_available: boolean;
+
+  collected_at: string;
+  first_seen_at?: string;
+  last_seen_at: string;
+}
+
+export interface ProductCatalogQuery {
+  market: Market;
+  gender: Exclude<Gender, "UNISEX">;
+
+  page: number;
+  size: number;
+
+  sort?: ProductSort;
+  brandSlugs?: Product["brandSlug"][];
+  categorySlug?: Product["categorySlug"] | null;
+}
+
+export interface ProductCatalogPage {
+  products: Product[];
+
+  page: number;
+  size: number;
+  total: number;
+  hasMore: boolean;
+
+  market: Market;
+  gender: Exclude<Gender, "UNISEX">;
+
+  updatedAt: string;
+}
+
+function createProductKey(product: Product): string {
+  return createHash("sha256")
+    .update(
+      [
+        product.market,
+        product.gender,
+        product.brandSlug,
+        product.sourceUrl.trim(),
+        product.productName.trim(),
+      ].join("|"),
+    )
+    .digest("hex");
+}
+
+function productToRow(product: Product): ProductCatalogRow {
+  const now = new Date().toISOString();
+
+  return {
+    product_key: createProductKey(product),
+
+    market: product.market,
+    currency: product.currency,
+    gender: product.gender,
+
+    brand_slug: product.brandSlug,
+    brand_name: product.brandName,
+
+    product_name: product.productName,
+    category_slug: product.categorySlug,
+
+    source_name: product.sourceName,
+    source_url: product.sourceUrl,
+    image_url: product.imageUrl,
+
+    original_price: product.originalPrice,
+    sale_price: product.salePrice,
+    discount_percentage: product.discountPercentage,
+
+    sale_verification: product.saleVerification,
+
+    is_available: product.isAvailable,
+
+    collected_at: product.collectedAt,
+    last_seen_at: now,
+  };
+}
+
+function rowToProduct(row: ProductCatalogRow): Product {
+  return {
+    id: row.product_key.slice(0, 24),
+
+    sourceName: row.source_name,
+    sourceUrl: row.source_url,
+
+    market: row.market,
+    currency: row.currency,
+    gender: row.gender,
+
+    brandSlug: row.brand_slug,
+    brandName: row.brand_name,
+
+    productName: row.product_name,
+    categorySlug: row.category_slug,
+
+    imageUrl: row.image_url,
+
+    originalPrice:
+      row.original_price === null ? null : Number(row.original_price),
+
+    salePrice: Number(row.sale_price),
+
+    discountPercentage:
+      row.discount_percentage === null ? null : Number(row.discount_percentage),
+
+    saleVerification: row.sale_verification,
+
+    isAvailable: row.is_available,
+    collectedAt: row.collected_at,
+  };
+}
+
+export async function upsertProducts(products: Product[]): Promise<number> {
+  if (products.length === 0) {
+    return 0;
+  }
+
+  const supabase = getSupabaseAdmin();
+
+  const uniqueRows = Array.from(
+    new Map(
+      products.map((product) => {
+        const row = productToRow(product);
+
+        return [row.product_key, row];
+      }),
+    ).values(),
+  );
+
+  const batchSize = 500;
+  let savedCount = 0;
+
+  for (let index = 0; index < uniqueRows.length; index += batchSize) {
+    const batch = uniqueRows.slice(index, index + batchSize);
+
+    const { error } = await supabase.from(PRODUCT_TABLE).upsert(batch, {
+      onConflict: "product_key",
+      ignoreDuplicates: false,
+    });
+
+    if (error) {
+      throw new Error(`Unable to save product catalog: ${error.message}`);
+    }
+
+    savedCount += batch.length;
+  }
+
+  return savedCount;
+}
+
+export async function getProductsPage({
+  market,
+  gender,
+  page,
+  size,
+  sort = "discount-desc",
+  brandSlugs = [],
+  categorySlug = null,
+}: ProductCatalogQuery): Promise<ProductCatalogPage> {
+  const supabase = getSupabaseAdmin();
+
+  const safePage = Math.max(1, page);
+  const safeSize = Math.min(300, Math.max(1, size));
+
+  const start = (safePage - 1) * safeSize;
+
+  const end = start + safeSize - 1;
+
+  let query = supabase
+    .from(PRODUCT_TABLE)
+    .select(
+      [
+        "product_key",
+        "market",
+        "currency",
+        "gender",
+        "brand_slug",
+        "brand_name",
+        "product_name",
+        "category_slug",
+        "source_name",
+        "source_url",
+        "image_url",
+        "original_price",
+        "sale_price",
+        "discount_percentage",
+        "sale_verification",
+        "is_available",
+        "collected_at",
+        "first_seen_at",
+        "last_seen_at",
+      ].join(","),
+      {
+        count: "exact",
+      },
+    )
+    .eq("market", market)
+    .in("gender", [gender, "UNISEX"])
+    .eq("is_available", true)
+    .eq("sale_verification", "VERIFIED");
+
+  if (brandSlugs.length > 0) {
+    query = query.in("brand_slug", brandSlugs);
+  }
+
+  if (categorySlug) {
+    query = query.eq("category_slug", categorySlug);
+  }
+
+  switch (sort) {
+    case "price-asc":
+      query = query.order("sale_price", {
+        ascending: true,
+      });
+      break;
+
+    case "price-desc":
+      query = query.order("sale_price", {
+        ascending: false,
+      });
+      break;
+
+    case "newest":
+      query = query.order("last_seen_at", {
+        ascending: false,
+      });
+      break;
+
+    case "discount-desc":
+    default:
+      query = query
+        .order("discount_percentage", {
+          ascending: false,
+          nullsFirst: false,
+        })
+        .order("last_seen_at", {
+          ascending: false,
+        });
+      break;
+  }
+
+  const { data, error, count } = await query.range(start, end);
+
+  if (error) {
+    throw new Error(`Unable to read product catalog: ${error.message}`);
+  }
+
+  const rows = (data ?? []) as unknown as ProductCatalogRow[];
+
+  const total = count ?? 0;
+
+  return {
+    products: rows.map(rowToProduct),
+
+    page: safePage,
+    size: safeSize,
+    total,
+    hasMore: end + 1 < total,
+
+    market,
+    gender,
+
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export async function getCatalogCount(
+  market: Market,
+  gender: Exclude<Gender, "UNISEX">,
+): Promise<number> {
+  const supabase = getSupabaseAdmin();
+
+  const { count, error } = await supabase
+    .from(PRODUCT_TABLE)
+    .select("product_key", {
+      count: "exact",
+      head: true,
+    })
+    .eq("market", market)
+    .in("gender", [gender, "UNISEX"])
+    .eq("is_available", true)
+    .eq("sale_verification", "VERIFIED");
+
+  if (error) {
+    throw new Error(`Unable to count products: ${error.message}`);
+  }
+
+  return count ?? 0;
+}
+import { NextRequest, NextResponse } from "next/server";
+
+import { getProductsPage } from "@/lib/products/product-repository";
+
+import type { Gender, Market, ProductSort } from "@/types/product";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+function isMarket(value: string | null): value is Market {
+  return value === "US" || value === "KR";
+}
+
+function isGender(value: string | null): value is Exclude<Gender, "UNISEX"> {
+  return value === "MEN" || value === "WOMEN";
+}
+
+function isSort(value: string | null): value is ProductSort {
+  return (
+    value === "discount-desc" ||
+    value === "price-asc" ||
+    value === "price-desc" ||
+    value === "newest"
+  );
+}
+
+function parsePositiveInteger(value: string | null, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const parameters = request.nextUrl.searchParams;
+
+    const marketValue = parameters.get("market");
+
+    const genderValue = parameters.get("gender");
+
+    const sortValue = parameters.get("sort");
+
+    const market: Market = isMarket(marketValue) ? marketValue : "US";
+
+    const gender: Exclude<Gender, "UNISEX"> = isGender(genderValue)
+      ? genderValue
+      : "MEN";
+
+    const sort: ProductSort = isSort(sortValue) ? sortValue : "discount-desc";
+
+    const page = parsePositiveInteger(parameters.get("page"), 1);
+
+    const size = Math.min(
+      300,
+      parsePositiveInteger(parameters.get("size"), 60),
+    );
+
+    const brandSlugs = parameters.getAll("brand").filter(Boolean);
+
+    const categorySlug = parameters.get("category");
+
+    const result = await getProductsPage({
+      market,
+      gender,
+      page,
+      size,
+      sort,
+      brandSlugs: brandSlugs as Parameters<
+        typeof getProductsPage
+      >[0]["brandSlugs"],
+      categorySlug:
+        categorySlug && categorySlug !== "all"
+          ? (categorySlug as Parameters<
+              typeof getProductsPage
+            >[0]["categorySlug"])
+          : null,
+    });
+
+    return NextResponse.json(result, {
+      headers: {
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=900",
+      },
+    });
+  } catch (error) {
+    console.error("Product catalog read failed:", error);
+
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to load product catalog.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+}
+=== SIDEBAR AND HOME FILTERING ===
+"use client";
+
+import { X } from "lucide-react";
+import { BRANDS, type BrandSlug } from "@/constants/brands";
+import {
+  CATEGORIES,
+  type CategorySlug,
+} from "@/constants/categories";
+import type { Market } from "@/types/product";
+
+interface SidebarProps {
+  open: boolean;
+  market: Market;
+  selectedBrands: BrandSlug[];
+  selectedCategory: CategorySlug;
+  onClose: () => void;
+  onBrandToggle: (brand: BrandSlug) => void;
+  onCategoryChange: (category: CategorySlug) => void;
+  onClearFilters: () => void;
+}
+
+export function Sidebar({
+  open,
+  market,
+  selectedBrands,
+  selectedCategory,
+  onClose,
+  onBrandToggle,
+  onCategoryChange,
+  onClearFilters,
+}: SidebarProps) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close menu overlay"
+        className={`fixed inset-0 z-40 bg-black/40 transition ${
+          open
+            ? "visible opacity-100"
+            : "invisible opacity-0"
+        }`}
+      />
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-[340px] max-w-[90vw] overflow-y-auto bg-[#f5f2ea] px-7 py-6 shadow-2xl transition-transform duration-300 ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="mb-10 flex items-center justify-between">
+          <h2 className="font-diploma text-3xl">Menu</h2>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close menu"
+            className="flex size-10 items-center justify-center rounded-full hover:bg-black/5"
+          >
+            <X size={22} />
+          </button>
+        </div>
+
+        <section className="border-b border-black/15 pb-8">
+          <div className="mb-5 flex items-center justify-between">
+            <h3 className="text-xs font-semibold tracking-[0.2em] text-black/50 uppercase">
+              Brands
+            </h3>
+
+            <button
+              type="button"
+              onClick={onClearFilters}
+              className="text-xs text-black/50 underline"
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {BRANDS.map((brand) => (
+              <label
+                key={brand.slug}
+                className="flex cursor-pointer items-center justify-between gap-4 text-sm"
+              >
+                <span>
+                  {brand.englishName}
+
+                  {market === "KR" && (
+                    <span className="ml-2 text-black/45">
+                      {brand.koreanName}
+                    </span>
+                  )}
+                </span>
+
+                <input
+                  type="checkbox"
+                  checked={selectedBrands.includes(brand.slug)}
+                  onChange={() => onBrandToggle(brand.slug)}
+                  className="size-4 accent-black"
+                />
+              </label>
+            ))}
+          </div>
+        </section>
+
+        <section className="pt-8">
+          <h3 className="mb-5 text-xs font-semibold tracking-[0.2em] text-black/50 uppercase">
+            Categories
+          </h3>
+
+          <div className="space-y-1">
+            {CATEGORIES.map((category) => (
+              <button
+                key={category.slug}
+                type="button"
+                onClick={() => {
+                  onCategoryChange(category.slug);
+                  onClose();
+                }}
+                className={`block w-full rounded-md px-3 py-2 text-left text-sm transition ${
+                  selectedCategory === category.slug
+                    ? "bg-black text-white"
+                    : "hover:bg-black/5"
+                }`}
+              >
+                {market === "KR"
+                  ? category.koreanName
+                  : category.englishName}
+              </button>
+            ))}
+          </div>
+        </section>
+      </aside>
+    </>
+  );
+}
+"use client";
+
+import Link from "next/link";
+
+import { useMemo, useState } from "react";
+import { Header } from "@/components/layout/Header";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { ProductGrid } from "@/components/products/ProductGrid";
+import { useProducts } from "@/hooks/use-products";
+import type { BrandSlug } from "@/constants/brands";
+import type { CategorySlug } from "@/constants/categories";
+import type { Gender, Market, ProductSort } from "@/types/product";
+
+type SelectableGender = Exclude<Gender, "UNISEX">;
+
+export default function HomeClient() {
+  const [market, setMarket] = useState<Market>("US");
+  const [gender, setGender] = useState<SelectableGender>("MEN");
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const [selectedBrands, setSelectedBrands] = useState<BrandSlug[]>([]);
+
+  const [selectedCategory, setSelectedCategory] = useState<CategorySlug>("all");
+
+  const [sort, setSort] = useState<ProductSort>("discount-desc");
+
+  const { data, error, isLoading, isValidating, mutate } = useProducts(
+    market,
+    gender,
+  );
+
+  const products = useMemo(() => {
+    const filtered = (data?.products ?? []).filter((product) => {
+      const matchesBrand =
+        selectedBrands.length === 0 ||
+        selectedBrands.includes(product.brandSlug);
+
+      const matchesCategory =
+        selectedCategory === "all" || product.categorySlug === selectedCategory;
+
+      return (
+        matchesBrand &&
+        matchesCategory &&
+        product.isAvailable &&
+        product.salePrice > 0
+      );
+    });
+
+    return [...filtered].sort((first, second) => {
+      switch (sort) {
+        case "price-asc":
+          return first.salePrice - second.salePrice;
+
+        case "price-desc":
+          return second.salePrice - first.salePrice;
+
+        case "newest":
+          return (
+            new Date(second.collectedAt).getTime() -
+            new Date(first.collectedAt).getTime()
+          );
+
+        case "discount-desc":
+        default: {
+          const verificationDifference =
+            Number(second.saleVerification === "VERIFIED") -
+            Number(first.saleVerification === "VERIFIED");
+
+          if (verificationDifference !== 0) {
+            return verificationDifference;
+          }
+
+          return (
+            (second.discountPercentage ?? 0) - (first.discountPercentage ?? 0)
+          );
+        }
+      }
+    });
+  }, [data, selectedBrands, selectedCategory, sort]);
+
+  function toggleBrand(brand: BrandSlug) {
+    setSelectedBrands((currentBrands) =>
+      currentBrands.includes(brand)
+        ? currentBrands.filter((currentBrand) => currentBrand !== brand)
+        : [...currentBrands, brand],
+    );
+  }
+
+  function clearFilters() {
+    setSelectedBrands([]);
+    setSelectedCategory("all");
+  }
+
+  return (
+    <main className="min-h-screen bg-[#f5f2ea] text-[#111111]">
+      <Link
+        href="/blog"
+        className="fixed bottom-6 right-6 z-50 inline-flex min-h-12 items-center justify-center rounded-full bg-black px-6 py-3 text-sm font-bold !text-white shadow-lg transition hover:bg-neutral-700"
+      >
+        Clothing Blog
+      </Link>
+      <Header
+        market={market}
+        gender={gender}
+        onMarketChange={(nextMarket) => {
+          setMarket(nextMarket);
+          clearFilters();
+        }}
+        onGenderChange={(nextGender) => {
+          setGender(nextGender);
+          clearFilters();
+        }}
+        onMenuOpen={() => setSidebarOpen(true)}
+      />
+
+      <Sidebar
+        open={sidebarOpen}
+        market={market}
+        selectedBrands={selectedBrands}
+        selectedCategory={selectedCategory}
+        onClose={() => setSidebarOpen(false)}
+        onBrandToggle={toggleBrand}
+        onCategoryChange={setSelectedCategory}
+        onClearFilters={clearFilters}
+      />
+
+      <section className="mx-auto max-w-[1600px] px-4 py-10 md:px-10">
+        <div className="mb-9 flex flex-col justify-between gap-5 border-b border-black/10 pb-7 sm:flex-row sm:items-end">
+          <div>
+            <p className="mb-2 text-xs font-medium tracking-[0.2em] text-black/45 uppercase">
+              {market === "US" ? "United States" : "Korean"}{" "}
+              {gender === "MEN" ? "Menswear" : "Womenswear"} Sale
+            </p>
+
+            <h2 className="text-2xl font-medium md:text-3xl">
+              Designer Sale Archive
+            </h2>
+
+            <p className="mt-2 text-sm text-black/50">
+              {isLoading
+                ? "Loading sale listings..."
+                : `${
+                    selectedBrands.length === 0 && selectedCategory === "all"
+                      ? (data?.total ?? products.length)
+                      : products.length
+                  } sale ${
+                    (selectedBrands.length === 0 && selectedCategory === "all"
+                      ? (data?.total ?? products.length)
+                      : products.length) === 1
+                      ? "listing"
+                      : "listings"
+                  }`}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => mutate()}
+              disabled={isValidating}
+              className="h-11 border border-black/15 px-4 text-sm transition hover:bg-black hover:text-white disabled:opacity-40"
+            >
+              {isValidating ? "Reloading..." : "Reload catalog"}
+            </button>
+
+            <select
+              value={sort}
+              onChange={(event) => setSort(event.target.value as ProductSort)}
+              aria-label="Sort products"
+              className="h-11 min-w-48 border border-black/15 bg-transparent px-3 text-sm outline-none"
+            >
+              <option value="discount-desc">Verified sales first</option>
+              <option value="price-asc">Lowest price</option>
+              <option value="price-desc">Highest price</option>
+              <option value="newest">Recently added</option>
+            </select>
+          </div>
+        </div>
+
+        {error ? (
+          <div className="border border-red-300 bg-red-50 p-6">
+            <p className="font-medium">Unable to retrieve sale listings</p>
+
+            <p className="mt-2 text-sm text-red-700">{error.message}</p>
+          </div>
+        ) : isLoading ? (
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index}>
+                <div className="aspect-[4/5] animate-pulse bg-black/10" />
+                <div className="mt-4 h-3 w-20 animate-pulse bg-black/10" />
+                <div className="mt-3 h-3 w-3/4 animate-pulse bg-black/10" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <ProductGrid products={products} />
+        )}
+      </section>
+    </main>
+  );
+}
+=== TEST FILES ===
