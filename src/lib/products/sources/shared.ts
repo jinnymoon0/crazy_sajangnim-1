@@ -8,6 +8,7 @@ const WOMEN_KEYWORDS = [
   "women",
   "women's",
   "womens",
+  "womenswear",
   "woman",
   "ladies",
   "female",
@@ -16,10 +17,17 @@ const WOMEN_KEYWORDS = [
   "우먼",
 ];
 
+/*
+ * "menswear" is listed explicitly: the plain keywords match whole words
+ * only, so a retailer category like "menswear-jackets" would otherwise
+ * fall through and be treated as unisex — putting men's jackets in
+ * front of shoppers browsing womenswear.
+ */
 const MEN_KEYWORDS = [
   " men ",
   " mens ",
   "men's",
+  "menswear",
   " man ",
   "male",
   "남성",
@@ -39,6 +47,13 @@ const WOMEN_GARMENT_PATTERNS = [
   /\bgowns?\b/,
   /\bheeled\b/,
   /\bheels\b/,
+  /\blingerie\b/,
+  /\bpanties\b/,
+  /\bbodysuits?\b/,
+  /\bbralettes?\b/,
+  /\bcamisoles?\b/,
+  /\bcorsets?\b/,
+  /\bstrapless\b/,
   /원피스/,
   /스커트/,
   /블라우스/,
