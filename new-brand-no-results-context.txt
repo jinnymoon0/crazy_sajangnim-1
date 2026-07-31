@@ -1,0 +1,1573 @@
+=== BRANCH AND STATUS ===
+dev
+ M src/app/api/products/route.ts
+ M src/constants/brands.ts
+ M src/lib/products/infer-brand.ts
+?? brand-currency-context.txt
+?? new-brand-no-results-context.txt
+=== BRAND CONFIGURATION ===
+export const BRANDS = [
+  {
+    slug: "adidas",
+    englishName: "ADIDAS",
+    koreanName: "아디다스",
+    aliases: ["ADIDAS", "아디다스"],
+  },
+  {
+    slug: "aime-leon-dore",
+    englishName: "AIMÉ LEON DORE",
+    koreanName: "에메레온도르",
+    aliases: [
+      "AIMÉ LEON DORE",
+      "AIME LEON DORE",
+      "AIME LEON DORÉ",
+      "ALD",
+      "에메레온도르",
+      "에메 레온 도르",
+    ],
+  },
+  {
+    slug: "auralee",
+    englishName: "AURALEE",
+    koreanName: "오라리",
+    aliases: ["AURALEE", "오라리"],
+  },
+  {
+    slug: "bape",
+    englishName: "BAPE",
+    koreanName: "베이프",
+    aliases: ["BAPE", "A BATHING APE", "BAPESTA", "베이프", "어 베이싱 에이프"],
+  },
+  {
+    slug: "beams-plus",
+    englishName: "BEAMS PLUS",
+    koreanName: "빔즈 플러스",
+    aliases: ["BEAMS PLUS", "BEAMS+", "빔즈 플러스", "빔스 플러스"],
+  },
+  {
+    slug: "beheavyer",
+    englishName: "BEHEAVYER",
+    koreanName: "비헤비어",
+    aliases: ["BEHEAVYER", "BE HEAVYER", "BEHAVIOR", "비헤비어", "비헤비어러"],
+  },
+  {
+    slug: "belier",
+    englishName: "BELIER",
+    koreanName: "벨리에",
+    aliases: ["BELIER", "BÉLIER", "벨리에"],
+  },
+  {
+    slug: "comoli",
+    englishName: "COMOLI",
+    koreanName: "코모리",
+    aliases: ["COMOLI", "코모리"],
+  },
+  {
+    slug: "comme-des-garcons",
+    englishName: "COMME DES GARÇONS",
+    koreanName: "꼼데가르송",
+    aliases: [
+      "COMME DES GARÇONS",
+      "COMME DES GARCONS",
+      "CDG",
+      "꼼데가르송",
+      "꼼 데 가르송",
+    ],
+  },
+  {
+    slug: "danton",
+    englishName: "DANTON",
+    koreanName: "단톤",
+    aliases: ["DANTON", "단톤"],
+  },
+  {
+    slug: "hatchingroom",
+    englishName: "HATCHINGROOM",
+    koreanName: "해칭룸",
+    aliases: ["HATCHINGROOM", "HATCHING ROOM", "해칭룸", "해칭 룸"],
+  },
+  {
+    slug: "hibiscus",
+    englishName: "HIBISCUS",
+    koreanName: "히비스커스",
+    aliases: ["HIBISCUS", "히비스커스"],
+  },
+  {
+    slug: "kamiya",
+    englishName: "KAMIYA",
+    koreanName: "카미야",
+    aliases: ["KAMIYA", "카미야"],
+  },
+  {
+    slug: "kapital",
+    englishName: "KAPITAL",
+    koreanName: "캐피탈",
+    aliases: ["KAPITAL", "캐피탈"],
+  },
+  {
+    slug: "kleesier",
+    englishName: "KLEESIER",
+    koreanName: "클리시어",
+    aliases: ["KLEESIER", "클리시어"],
+  },
+  {
+    slug: "lemaire",
+    englishName: "LEMAIRE",
+    koreanName: "르메르",
+    aliases: ["LEMAIRE", "CHRISTOPHE LEMAIRE", "르메르"],
+  },
+  {
+    slug: "needles",
+    englishName: "NEEDLES",
+    koreanName: "니들스",
+    aliases: ["NEEDLES", "NEPENTHES NEEDLES", "ニードルズ", "니들스"],
+  },
+  {
+    slug: "nike",
+    englishName: "NIKE",
+    koreanName: "나이키",
+    aliases: ["NIKE", "NIKE SPORTSWEAR", "나이키"],
+  },
+  {
+    slug: "nuuanu",
+    englishName: "NUUANU",
+    koreanName: "누아누",
+    aliases: ["NUUANU", "NUU ANU", "누아누"],
+  },
+  {
+    slug: "ourselves",
+    englishName: "OURSELVES",
+    koreanName: "아워셀브스",
+    aliases: ["OURSELVES", "OUR SELVES", "아워셀브스", "아워 셀브스"],
+  },
+  {
+    slug: "pakua",
+    englishName: "PAKUA",
+    koreanName: "파쿠아",
+    aliases: ["PAKUA", "PA KUA", "파쿠아"],
+  },
+  {
+    slug: "polyteru",
+    englishName: "POLYTERU",
+    koreanName: "폴리테루",
+    aliases: ["POLYTERU", "POLY TERU", "폴리테루"],
+  },
+  {
+    slug: "puma",
+    englishName: "PUMA",
+    koreanName: "퓨마",
+    aliases: ["PUMA", "PUMA SELECT", "퓨마"],
+  },
+  {
+    slug: "recto",
+    englishName: "RECTO",
+    koreanName: "렉토",
+    aliases: ["RECTO", "렉토"],
+  },
+  {
+    slug: "tony-wack",
+    englishName: "TONY WACK",
+    koreanName: "토니웩",
+    aliases: ["TONY WACK", "TONYWACK", "TONY-WACK", "토니웩", "토니 왁"],
+  },
+] as const;
+
+export type Brand = (typeof BRANDS)[number];
+export type BrandSlug = Brand["slug"];
+=== PRODUCTS API LIMITS AND LOOPS ===
+1-import { createHash } from "node:crypto";
+2-import pLimit from "p-limit";
+3-import { NextRequest, NextResponse } from "next/server";
+4-
+5:import { BRANDS, type Brand, type BrandSlug } from "@/constants/brands";
+6-import { inferBrand } from "@/lib/products/infer-brand";
+7-import { inferCategory } from "@/lib/products/infer-category";
+8-import { extractProductsFromPage } from "@/lib/products/extract-products-from-page";
+9-import { upsertProducts } from "@/lib/products/product-repository";
+10-import { collectDirectProducts } from "@/lib/products/sources";
+11-import { searchSearxng, type SearxngResult } from "@/lib/search/searxng";
+12-import { calculateDiscountPercentage } from "@/lib/utils";
+13-import type { Gender, Market, Product } from "@/types/product";
+--
+109-}
+110-
+111-function isRequestedGender(
+112-  value: string | null,
+113-): value is Exclude<Gender, "UNISEX"> {
+114-  return value === "MEN" || value === "WOMEN";
+115-}
+116-
+117:function createBrandSearchExpression(
+118-  brand: BrandSearch,
+119-  market: Market,
+120-): string {
+121-  const aliases =
+122-    market === "KR"
+123-      ? brand.aliases
+124-      : brand.aliases.filter((alias) => /[A-Za-z]/.test(alias));
+125-
+126-  return `(${aliases
+127-    .map((alias) => `"${alias.replace(/"/g, '\\"')}"`)
+128-    .join(" OR ")})`;
+129-}
+130-
+131:function createQuery(
+132-  brand: BrandSearch,
+133-  market: Market,
+134-  gender: Exclude<Gender, "UNISEX">,
+135-): string {
+136-  if (market === "KR") {
+137-    const genderTerms =
+138-      gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)";
+139-
+140-    return [
+141:      createBrandSearchExpression(brand, "KR"),
+142-      genderTerms,
+143-      "(세일 OR 할인 OR 시즌오프 OR 아울렛)",
+144-      "(의류 OR 자켓 OR 팬츠 OR 셔츠 OR 니트 OR 신발 OR 가방)",
+145-      "-중고",
+146-      "-리셀",
+147-    ].join(" ");
+148-  }
+149-
+150-  const genderTerms =
+151-    gender === "MEN"
+152-      ? '(men OR mens OR menswear OR "men\'s")'
+153-      : '(women OR womens OR womenswear OR "women\'s" OR female)';
+154-
+155-  return [
+156:    createBrandSearchExpression(brand, "US"),
+157-    genderTerms,
+158-    "(sale OR clearance OR discount OR outlet)",
+159-    "(clothing OR jacket OR pants OR shirt OR knitwear OR shoes OR bag)",
+160-    "-used",
+161-    "-resale",
+162-    "-preowned",
+163-  ].join(" ");
+164-}
+--
+332-
+333-  return image;
+334-}
+335-
+336-function createProductId(result: SearxngResult): string {
+337-  return createHash("sha256")
+338-    .update([result.title, result.url, result.engine ?? ""].join("|"))
+339-    .digest("hex")
+340:    .slice(0, 24);
+341-}
+342-
+343-function normalizeBrandText(value: string): string {
+344-  return value
+345-    .normalize("NFKC")
+346-    .toLowerCase()
+347-    .replace(/[^a-z0-9가-힣]+/g, " ")
+348-    .replace(/\s+/g, " ")
+--
+479-    sourceName: getSourceName(result),
+480-    sourceUrl,
+481-
+482-    market,
+483-    currency: market === "KR" ? "KRW" : "USD",
+484-
+485-    gender: requestedGender,
+486-
+487:    brandSlug: detectedBrand.slug,
+488-    brandName: detectedBrand.name,
+489-
+490-    productName: title,
+491-    categorySlug: inferCategory(text),
+492-
+493-    imageUrl,
+494-
+495-    originalPrice: verifiedPrices?.originalPrice ?? null,
+--
+540-    "shoplostfound.com",
+541-    "norsestore.com",
+542-    "goodhoodstore.com",
+543-  ];
+544-
+545-  return preferredDomains.map((domain) =>
+546-    [
+547-      `site:${domain}`,
+548:      createBrandSearchExpression(brand, "US"),
+549-      genderTerm,
+550-      "(sale OR clearance OR discount)",
+551-      '("$" OR "sale price" OR "regular price")',
+552-      "-used",
+553-      "-resale",
+554-      "-preowned",
+555-    ].join(" "),
+556-  );
+--
+612-    "ssense.com",
+613-    "shopbop.com",
+614-    "revolve.com",
+615-  ];
+616-
+617-  return domains.map((domain) =>
+618-    [
+619-      `site:${domain}`,
+620:      createBrandSearchExpression(brand, "US"),
+621-      genderTerms,
+622-      "(sale OR discount OR clearance OR markdown)",
+623-      "-used",
+624-      "-resale",
+625-      "-preowned",
+626-    ].join(" "),
+627-  );
+628-}
+--
+644-      "스커트 원피스 드레스",
+645-      "신발 스니커즈 부츠 샌들",
+646-      "가방 토트백 숄더백",
+647-      "모자 벨트 지갑 액세서리",
+648-    ];
+649-
+650-    return categories.map((category) =>
+651-      [
+652:        createBrandSearchExpression(brand, "KR"),
+653-        genderTerms,
+654-        `(${category})`,
+655-        "(세일 OR 할인 OR 시즌오프 OR 아울렛)",
+656-        "-중고",
+657-        "-리셀",
+658-      ].join(" "),
+659-    );
+660-  }
+--
+672-    "(skirt OR dress OR gown)",
+673-    "(shoes OR sneakers OR boots OR sandals OR loafers)",
+674-    "(bag OR tote OR shoulder bag OR backpack)",
+675-    "(hat OR belt OR wallet OR scarf OR accessories)",
+676-  ];
+677-
+678-  return categories.map((category) =>
+679-    [
+680:      createBrandSearchExpression(brand, "US"),
+681-      genderTerms,
+682-      category,
+683-      "(sale OR clearance OR discount OR markdown)",
+684-      '("$" OR "sale price" OR "regular price")',
+685-      "-used",
+686-      "-resale",
+687-      "-preowned",
+688-    ].join(" "),
+--
+721-    "eqlstore.com",
+722-    "hago.kr",
+723-    "ocokorea.com",
+724-  ];
+725-
+726-  return domains.map((domain) =>
+727-    [
+728-      `site:${domain}`,
+729:      createBrandSearchExpression(brand, "KR"),
+730-      genderTerms,
+731-      "(세일 OR 할인 OR 시즌오프 OR 아울렛 OR 특가)",
+732-      '("판매가" OR "할인가" OR "정가" OR "원")',
+733-      "-중고",
+734-      "-리셀",
+735-    ].join(" "),
+736-  );
+737-}
+--
+764-    "luisaviaroma.com",
+765-    "cettire.com",
+766-  ];
+767-
+768-  return domains.flatMap((domain) =>
+769-    categories.map((category) =>
+770-      [
+771-        `site:${domain}`,
+772:        createBrandSearchExpression(brand, "US"),
+773-        `"${category}"`,
+774-        "(sale OR discount OR clearance OR markdown)",
+775-        "-used",
+776-        "-resale",
+777-        "-preowned",
+778-      ].join(" "),
+779-    ),
+780-  );
+781-}
+782-
+783-function createSearchQueries(
+784-  brand: BrandSearch,
+785-  market: Market,
+786-  gender: Exclude<Gender, "UNISEX">,
+787-): string[] {
+788:  const baseQuery = createQuery(brand, market, gender);
+789-
+790-  if (market === "KR") {
+791-    return [
+792-      baseQuery,
+793-      ...createCategoryQueries(brand, market, gender),
+794-      ...createKoreanRetailerQueries(brand, gender),
+795-      [
+796:        createBrandSearchExpression(brand, "KR"),
+797-        gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)",
+798-        "(세일 OR 할인 OR 시즌오프 OR 아울렛)",
+799-        '("판매가" OR "할인가" OR "정가" OR "원")',
+800-        "-중고",
+801-        "-리셀",
+802-      ].join(" "),
+803-      [
+804:        createBrandSearchExpression(brand, "KR"),
+805-        gender === "MEN" ? "(남성 OR 남자 OR 맨즈)" : "(여성 OR 여자 OR 우먼)",
+806-        '("판매가" OR "할인가")',
+807-        "(자켓 OR 셔츠 OR 팬츠 OR 니트 OR 신발 OR 가방)",
+808-        "-컬렉션",
+809-        "-중고",
+810-        "-리셀",
+811-      ].join(" "),
+812-    ];
+--
+814-
+815-  return [
+816-    baseQuery,
+817-    ...createCategoryQueries(brand, market, gender),
+818-    ...(gender === "WOMEN" ? createWomenProductQueries(brand) : []),
+819-    ...createDirectRetailerQueries(brand, gender),
+820-    ...createRetailerQueries(brand, gender),
+821-    [
+822:      createBrandSearchExpression(brand, "US"),
+823-      gender === "MEN" ? "(men OR mens)" : "(women OR womens)",
+824-      "(sale OR clearance OR discount OR outlet)",
+825-      '("sale price" OR "regular price" OR "original price" OR "$")',
+826-      "-used",
+827-      "-resale",
+828-      "-preowned",
+829-    ].join(" "),
+830-    [
+831:      createBrandSearchExpression(brand, "US"),
+832-      gender === "MEN" ? "(men OR mens)" : "(women OR womens)",
+833-      '("sale price" OR "regular price")',
+834-      "(jacket OR shirt OR pants OR sweater OR shoes OR bag)",
+835-      "-collection",
+836-      "-used",
+837-      "-resale",
+838-      "-preowned",
+839-    ].join(" "),
+--
+841-}
+842-
+843-async function searchAdditionalBrandPage(
+844-  brand: BrandSearch,
+845-  market: Market,
+846-  gender: Exclude<Gender, "UNISEX">,
+847-): Promise<SearxngResult[]> {
+848-  try {
+849:    const response = await searchSearxng(createQuery(brand, market, gender), {
+850-      language: market === "KR" ? "ko-KR" : "en-US",
+851-      page: 4,
+852-    });
+853-
+854-    return response.results;
+855-  } catch {
+856-    return [];
+857-  }
+--
+919-
+920-    return (
+921-      resultExplicitlyMatchesBrand(result, brand) && !isSecondHandResult(text)
+922-    );
+923-  });
+924-
+925-  const pageLimit = pLimit(8);
+926-
+927:  const settledPages = await Promise.allSettled(
+928-    pageCandidates.map((result) =>
+929-      pageLimit(() =>
+930-        extractProductsFromPage({
+931-          pageUrl: result.url,
+932-          market,
+933-          requestedGender: gender,
+934:          brandSlug: brand.slug,
+935-          brandName: brand.englishName,
+936-          maxProducts: 150,
+937-        }),
+938-      ),
+939-    ),
+940-  );
+941-
+942-  const extractedProducts = settledPages.flatMap((result) =>
+--
+1003-    unresponsiveEngines: uniqueEngineErrors,
+1004-    diagnostics,
+1005-    error:
+1006-      uniqueResults.length === 0 && errors.length > 0 ? errors[0] : undefined,
+1007-  };
+1008-}
+1009-
+1010-export async function GET(request: NextRequest) {
+1011:  const marketParameter = request.nextUrl.searchParams.get("market");
+1012-
+1013:  const genderParameter = request.nextUrl.searchParams.get("gender");
+1014-
+1015:  const debug = request.nextUrl.searchParams.get("debug") === "true";
+1016-
+1017:  const directOnly = request.nextUrl.searchParams.get("mode") === "direct";
+1018-
+1019-  const market: Market = isMarket(marketParameter) ? marketParameter : "US";
+1020-
+1021-  const gender: Exclude<Gender, "UNISEX"> = isRequestedGender(genderParameter)
+1022-    ? genderParameter
+1023-    : "MEN";
+1024-
+1025-  if (!directOnly && !process.env.SEARXNG_URL?.trim()) {
+--
+1083-            },
+1084-          }
+1085-        : {}),
+1086-    });
+1087-  }
+1088-
+1089-  const brandLimit = pLimit(2);
+1090-
+1091:  const searchableBrands = BRANDS.filter(
+1092-    (brand) => gender !== "WOMEN" || !MEN_ONLY_BRAND_SLUGS.has(brand.slug),
+1093-  );
+1094-
+1095:  const results = await Promise.all(
+1096-    searchableBrands.map((brand) =>
+1097-      brandLimit(() => searchBrand(brand, market, gender)),
+1098-    ),
+1099-  );
+1100-
+1101-  const allProducts = results.flatMap((result) => result.products);
+1102-
+1103-  const products = Array.from(
+=== FULL PRODUCT HOOK ===
+"use client";
+
+import useSWR from "swr";
+
+import type { Gender, Market, Product } from "@/types/product";
+
+interface ProductResponse {
+  products: Product[];
+
+  page: number;
+  size: number;
+  total: number;
+  hasMore: boolean;
+
+  market: Market;
+  gender: Exclude<Gender, "UNISEX">;
+
+  updatedAt: string;
+}
+
+interface ErrorResponse {
+  error?: string;
+}
+
+async function fetcher(url: string): Promise<ProductResponse> {
+  const response = await fetch(url);
+
+  const body = (await response.json()) as ProductResponse | ErrorResponse;
+
+  if (!response.ok) {
+    throw new Error(
+      "error" in body && body.error
+        ? body.error
+        : "Unable to load product listings.",
+    );
+  }
+
+  return body as ProductResponse;
+}
+
+export function useProducts(market: Market, gender: Exclude<Gender, "UNISEX">) {
+  const query = new URLSearchParams({
+    market,
+    gender,
+    page: "1",
+    size: "300",
+    sort: "discount-desc",
+  });
+
+  return useSWR<ProductResponse>(
+    `/api/catalog/products?${query.toString()}`,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 5 * 60 * 1000,
+      keepPreviousData: true,
+    },
+  );
+}
+=== CATALOG ROUTE ===
+import { NextRequest, NextResponse } from "next/server";
+
+import { getProductsPage } from "@/lib/products/product-repository";
+
+import type { Gender, Market, ProductSort } from "@/types/product";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+function isMarket(value: string | null): value is Market {
+  return value === "US" || value === "KR";
+}
+
+function isGender(value: string | null): value is Exclude<Gender, "UNISEX"> {
+  return value === "MEN" || value === "WOMEN";
+}
+
+function isSort(value: string | null): value is ProductSort {
+  return (
+    value === "discount-desc" ||
+    value === "price-asc" ||
+    value === "price-desc" ||
+    value === "newest"
+  );
+}
+
+function parsePositiveInteger(value: string | null, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const parameters = request.nextUrl.searchParams;
+
+    const marketValue = parameters.get("market");
+
+    const genderValue = parameters.get("gender");
+
+    const sortValue = parameters.get("sort");
+
+    const market: Market = isMarket(marketValue) ? marketValue : "US";
+
+    const gender: Exclude<Gender, "UNISEX"> = isGender(genderValue)
+      ? genderValue
+      : "MEN";
+
+    const sort: ProductSort = isSort(sortValue) ? sortValue : "discount-desc";
+
+    const page = parsePositiveInteger(parameters.get("page"), 1);
+
+    const size = Math.min(
+      300,
+      parsePositiveInteger(parameters.get("size"), 60),
+    );
+
+    const brandSlugs = parameters.getAll("brand").filter(Boolean);
+
+    const categorySlug = parameters.get("category");
+
+    const result = await getProductsPage({
+      market,
+      gender,
+      page,
+      size,
+      sort,
+      brandSlugs: brandSlugs as Parameters<
+        typeof getProductsPage
+      >[0]["brandSlugs"],
+      categorySlug:
+        categorySlug && categorySlug !== "all"
+          ? (categorySlug as Parameters<
+              typeof getProductsPage
+            >[0]["categorySlug"])
+          : null,
+    });
+
+    return NextResponse.json(result, {
+      headers: {
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=900",
+      },
+    });
+  } catch (error) {
+    console.error("Product catalog read failed:", error);
+
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to load product catalog.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+}
+=== PRODUCT REPOSITORY ===
+import { createHash } from "node:crypto";
+
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import type { Gender, Market, Product, ProductSort } from "@/types/product";
+
+const PRODUCT_TABLE = "product_catalog";
+
+interface ProductCatalogRow {
+  product_key: string;
+
+  market: Market;
+  currency: Product["currency"];
+  gender: Gender;
+
+  brand_slug: Product["brandSlug"];
+  brand_name: string;
+
+  product_name: string;
+  category_slug: Product["categorySlug"];
+
+  source_name: string;
+  source_url: string;
+  image_url: string;
+
+  original_price: number | null;
+  sale_price: number;
+  discount_percentage: number | null;
+
+  sale_verification: Product["saleVerification"];
+  is_available: boolean;
+
+  collected_at: string;
+  first_seen_at?: string;
+  last_seen_at: string;
+}
+
+export interface ProductCatalogQuery {
+  market: Market;
+  gender: Exclude<Gender, "UNISEX">;
+
+  page: number;
+  size: number;
+
+  sort?: ProductSort;
+  brandSlugs?: Product["brandSlug"][];
+  categorySlug?: Product["categorySlug"] | null;
+}
+
+export interface ProductCatalogPage {
+  products: Product[];
+
+  page: number;
+  size: number;
+  total: number;
+  hasMore: boolean;
+
+  market: Market;
+  gender: Exclude<Gender, "UNISEX">;
+
+  updatedAt: string;
+}
+
+function createProductKey(product: Product): string {
+  return createHash("sha256")
+    .update(
+      [
+        product.market,
+        product.gender,
+        product.brandSlug,
+        product.sourceUrl.trim(),
+        product.productName.trim(),
+      ].join("|"),
+    )
+    .digest("hex");
+}
+
+function productToRow(product: Product): ProductCatalogRow {
+  const now = new Date().toISOString();
+
+  return {
+    product_key: createProductKey(product),
+
+    market: product.market,
+    currency: product.currency,
+    gender: product.gender,
+
+    brand_slug: product.brandSlug,
+    brand_name: product.brandName,
+
+    product_name: product.productName,
+    category_slug: product.categorySlug,
+
+    source_name: product.sourceName,
+    source_url: product.sourceUrl,
+    image_url: product.imageUrl,
+
+    original_price: product.originalPrice,
+    sale_price: product.salePrice,
+    discount_percentage: product.discountPercentage,
+
+    sale_verification: product.saleVerification,
+
+    is_available: product.isAvailable,
+
+    collected_at: product.collectedAt,
+    last_seen_at: now,
+  };
+}
+
+function rowToProduct(row: ProductCatalogRow): Product {
+  return {
+    id: row.product_key.slice(0, 24),
+
+    sourceName: row.source_name,
+    sourceUrl: row.source_url,
+
+    market: row.market,
+    currency: row.currency,
+    gender: row.gender,
+
+    brandSlug: row.brand_slug,
+    brandName: row.brand_name,
+
+    productName: row.product_name,
+    categorySlug: row.category_slug,
+
+    imageUrl: row.image_url,
+
+    originalPrice:
+      row.original_price === null ? null : Number(row.original_price),
+
+    salePrice: Number(row.sale_price),
+
+    discountPercentage:
+      row.discount_percentage === null ? null : Number(row.discount_percentage),
+
+    saleVerification: row.sale_verification,
+
+    isAvailable: row.is_available,
+    collectedAt: row.collected_at,
+  };
+}
+
+export async function upsertProducts(products: Product[]): Promise<number> {
+  if (products.length === 0) {
+    return 0;
+  }
+
+  const supabase = getSupabaseAdmin();
+
+  const uniqueRows = Array.from(
+    new Map(
+      products.map((product) => {
+        const row = productToRow(product);
+
+        return [row.product_key, row];
+      }),
+    ).values(),
+  );
+
+  const batchSize = 500;
+  let savedCount = 0;
+
+  for (let index = 0; index < uniqueRows.length; index += batchSize) {
+    const batch = uniqueRows.slice(index, index + batchSize);
+
+    const { error } = await supabase.from(PRODUCT_TABLE).upsert(batch, {
+      onConflict: "product_key",
+      ignoreDuplicates: false,
+    });
+
+    if (error) {
+      throw new Error(`Unable to save product catalog: ${error.message}`);
+    }
+
+    savedCount += batch.length;
+  }
+
+  return savedCount;
+}
+
+export async function getProductsPage({
+  market,
+  gender,
+  page,
+  size,
+  sort = "discount-desc",
+  brandSlugs = [],
+  categorySlug = null,
+}: ProductCatalogQuery): Promise<ProductCatalogPage> {
+  const supabase = getSupabaseAdmin();
+
+  const safePage = Math.max(1, page);
+  const safeSize = Math.min(300, Math.max(1, size));
+
+  const start = (safePage - 1) * safeSize;
+
+  const end = start + safeSize - 1;
+
+  let query = supabase
+    .from(PRODUCT_TABLE)
+    .select(
+      [
+        "product_key",
+        "market",
+        "currency",
+        "gender",
+        "brand_slug",
+        "brand_name",
+        "product_name",
+        "category_slug",
+        "source_name",
+        "source_url",
+        "image_url",
+        "original_price",
+        "sale_price",
+        "discount_percentage",
+        "sale_verification",
+        "is_available",
+        "collected_at",
+        "first_seen_at",
+        "last_seen_at",
+      ].join(","),
+      {
+        count: "exact",
+      },
+    )
+    .eq("market", market)
+    .in("gender", [gender, "UNISEX"])
+    .eq("is_available", true)
+    .eq("sale_verification", "VERIFIED");
+
+  if (brandSlugs.length > 0) {
+    query = query.in("brand_slug", brandSlugs);
+  }
+
+  if (categorySlug) {
+    query = query.eq("category_slug", categorySlug);
+  }
+
+  switch (sort) {
+    case "price-asc":
+      query = query.order("sale_price", {
+        ascending: true,
+      });
+      break;
+
+    case "price-desc":
+      query = query.order("sale_price", {
+        ascending: false,
+      });
+      break;
+
+    case "newest":
+      query = query.order("last_seen_at", {
+        ascending: false,
+      });
+      break;
+
+    case "discount-desc":
+    default:
+      query = query
+        .order("discount_percentage", {
+          ascending: false,
+          nullsFirst: false,
+        })
+        .order("last_seen_at", {
+          ascending: false,
+        });
+      break;
+  }
+
+  const { data, error, count } = await query.range(start, end);
+
+  if (error) {
+    throw new Error(`Unable to read product catalog: ${error.message}`);
+  }
+
+  const rows = (data ?? []) as unknown as ProductCatalogRow[];
+
+  const total = count ?? 0;
+
+  return {
+    products: rows.map(rowToProduct),
+
+    page: safePage,
+    size: safeSize,
+    total,
+    hasMore: end + 1 < total,
+
+    market,
+    gender,
+
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export async function getCatalogCount(
+  market: Market,
+  gender: Exclude<Gender, "UNISEX">,
+): Promise<number> {
+  const supabase = getSupabaseAdmin();
+
+  const { count, error } = await supabase
+    .from(PRODUCT_TABLE)
+    .select("product_key", {
+      count: "exact",
+      head: true,
+    })
+    .eq("market", market)
+    .in("gender", [gender, "UNISEX"])
+    .eq("is_available", true)
+    .eq("sale_verification", "VERIFIED");
+
+  if (error) {
+    throw new Error(`Unable to count products: ${error.message}`);
+  }
+
+  return count ?? 0;
+}
+=== API REQUESTS FROM BROWSER CODE ===
+src/lib/retailers/collect-korean-products.ts-3-import type { Product } from "@/types/product";
+src/lib/retailers/collect-korean-products.ts-4-import { discoverKoreanRetailerPages } from "./google-retailer-search";
+src/lib/retailers/collect-korean-products.ts-5-import { parseRetailerProductPage } from "./parse-retailer-product";
+src/lib/retailers/collect-korean-products.ts-6-
+src/lib/retailers/collect-korean-products.ts-7-interface CollectOptions {
+src/lib/retailers/collect-korean-products.ts:8:  brandSlug: BrandSlug;
+src/lib/retailers/collect-korean-products.ts-9-  englishBrandName: string;
+src/lib/retailers/collect-korean-products.ts-10-  koreanBrandName: string;
+src/lib/retailers/collect-korean-products.ts-11-
+src/lib/retailers/collect-korean-products.ts-12-  gender: "MEN" | "WOMEN";
+src/lib/retailers/collect-korean-products.ts-13-}
+src/lib/retailers/collect-korean-products.ts-14-
+src/lib/retailers/collect-korean-products.ts-15-export async function collectKoreanRetailerProducts({
+src/lib/retailers/collect-korean-products.ts:16:  brandSlug,
+src/lib/retailers/collect-korean-products.ts-17-  englishBrandName,
+src/lib/retailers/collect-korean-products.ts-18-  koreanBrandName,
+src/lib/retailers/collect-korean-products.ts-19-  gender,
+src/lib/retailers/collect-korean-products.ts-20-}: CollectOptions): Promise<Product[]> {
+src/lib/retailers/collect-korean-products.ts-21-  const candidates = await discoverKoreanRetailerPages({
+--
+src/lib/retailers/collect-korean-products.ts-42-        parseRetailerProductPage({
+src/lib/retailers/collect-korean-products.ts-43-          retailerName: candidate.retailerName,
+src/lib/retailers/collect-korean-products.ts-44-          url: candidate.url,
+src/lib/retailers/collect-korean-products.ts-45-          fallbackTitle: candidate.title,
+src/lib/retailers/collect-korean-products.ts-46-          fallbackThumbnail: candidate.thumbnail,
+src/lib/retailers/collect-korean-products.ts:47:          brandSlug,
+src/lib/retailers/collect-korean-products.ts-48-          brandName: englishBrandName,
+src/lib/retailers/collect-korean-products.ts-49-          gender,
+src/lib/retailers/collect-korean-products.ts-50-        }),
+src/lib/retailers/collect-korean-products.ts-51-      ),
+src/lib/retailers/collect-korean-products.ts-52-    ),
+--
+src/lib/retailers/parse-retailer-product.ts-11-  retailerName: string;
+src/lib/retailers/parse-retailer-product.ts-12-  url: string;
+src/lib/retailers/parse-retailer-product.ts-13-  fallbackTitle: string;
+src/lib/retailers/parse-retailer-product.ts-14-  fallbackThumbnail?: string;
+src/lib/retailers/parse-retailer-product.ts-15-
+src/lib/retailers/parse-retailer-product.ts:16:  brandSlug: BrandSlug;
+src/lib/retailers/parse-retailer-product.ts-17-  brandName: string;
+src/lib/retailers/parse-retailer-product.ts-18-  gender: "MEN" | "WOMEN";
+src/lib/retailers/parse-retailer-product.ts-19-}
+src/lib/retailers/parse-retailer-product.ts-20-
+src/lib/retailers/parse-retailer-product.ts-21-interface JsonLdProduct {
+--
+src/lib/retailers/parse-retailer-product.ts-240-export async function parseRetailerProductPage({
+src/lib/retailers/parse-retailer-product.ts-241-  retailerName,
+src/lib/retailers/parse-retailer-product.ts-242-  url,
+src/lib/retailers/parse-retailer-product.ts-243-  fallbackTitle,
+src/lib/retailers/parse-retailer-product.ts-244-  fallbackThumbnail,
+src/lib/retailers/parse-retailer-product.ts:245:  brandSlug,
+src/lib/retailers/parse-retailer-product.ts-246-  gender,
+src/lib/retailers/parse-retailer-product.ts-247-}: ParseOptions): Promise<Product | null> {
+src/lib/retailers/parse-retailer-product.ts-248-  const response = await fetch(url, {
+src/lib/retailers/parse-retailer-product.ts-249-    headers: {
+src/lib/retailers/parse-retailer-product.ts-250-      Accept: "text/html,application/xhtml+xml",
+--
+src/lib/retailers/parse-retailer-product.ts-301-     * Reject products whose actual brand does not match the brand whose
+src/lib/retailers/parse-retailer-product.ts-302-     * retailer search produced this candidate.
+src/lib/retailers/parse-retailer-product.ts-303-     */
+src/lib/retailers/parse-retailer-product.ts-304-    if (
+src/lib/retailers/parse-retailer-product.ts-305-      !detectedBrand ||
+src/lib/retailers/parse-retailer-product.ts:306:      detectedBrand.slug !== brandSlug
+src/lib/retailers/parse-retailer-product.ts-307-    ) {
+src/lib/retailers/parse-retailer-product.ts-308-      continue;
+src/lib/retailers/parse-retailer-product.ts-309-    }
+src/lib/retailers/parse-retailer-product.ts-310-
+src/lib/retailers/parse-retailer-product.ts-311-    const rawImage = Array.isArray(jsonProduct.image)
+--
+src/lib/retailers/parse-retailer-product.ts-357-
+src/lib/retailers/parse-retailer-product.ts-358-      market: "KR",
+src/lib/retailers/parse-retailer-product.ts-359-      currency: "KRW",
+src/lib/retailers/parse-retailer-product.ts-360-      gender: inferGender(title, gender),
+src/lib/retailers/parse-retailer-product.ts-361-
+src/lib/retailers/parse-retailer-product.ts:362:      brandSlug: detectedBrand.slug,
+src/lib/retailers/parse-retailer-product.ts-363-      brandName: detectedBrand.name,
+src/lib/retailers/parse-retailer-product.ts-364-
+src/lib/retailers/parse-retailer-product.ts-365-      productName: title,
+src/lib/retailers/parse-retailer-product.ts-366-      categorySlug: inferCategory(title),
+src/lib/retailers/parse-retailer-product.ts-367-
+--
+src/lib/products/extract-products-from-page.ts-10-
+src/lib/products/extract-products-from-page.ts-11-interface ExtractOptions {
+src/lib/products/extract-products-from-page.ts-12-  pageUrl: string;
+src/lib/products/extract-products-from-page.ts-13-  market: Market;
+src/lib/products/extract-products-from-page.ts-14-  requestedGender: Exclude<Gender, "UNISEX">;
+src/lib/products/extract-products-from-page.ts:15:  brandSlug: BrandSlug;
+src/lib/products/extract-products-from-page.ts-16-  brandName: string;
+src/lib/products/extract-products-from-page.ts-17-  maxProducts?: number;
+src/lib/products/extract-products-from-page.ts-18-}
+src/lib/products/extract-products-from-page.ts-19-
+src/lib/products/extract-products-from-page.ts-20-interface JsonLdImage {
+--
+src/lib/products/extract-products-from-page.ts-301-
+src/lib/products/extract-products-from-page.ts-302-export async function extractProductsFromPage({
+src/lib/products/extract-products-from-page.ts-303-  pageUrl,
+src/lib/products/extract-products-from-page.ts-304-  market,
+src/lib/products/extract-products-from-page.ts-305-  requestedGender,
+src/lib/products/extract-products-from-page.ts:306:  brandSlug,
+src/lib/products/extract-products-from-page.ts-307-  brandName,
+src/lib/products/extract-products-from-page.ts-308-  maxProducts = 12,
+src/lib/products/extract-products-from-page.ts-309-}: ExtractOptions): Promise<Product[]> {
+src/lib/products/extract-products-from-page.ts-310-  const response = await fetch(pageUrl, {
+src/lib/products/extract-products-from-page.ts-311-    headers: {
+--
+src/lib/products/extract-products-from-page.ts-332-    $,
+src/lib/products/extract-products-from-page.ts-333-    html,
+src/lib/products/extract-products-from-page.ts-334-    pageUrl,
+src/lib/products/extract-products-from-page.ts-335-    market,
+src/lib/products/extract-products-from-page.ts-336-    requestedGender,
+src/lib/products/extract-products-from-page.ts:337:    brandSlug,
+src/lib/products/extract-products-from-page.ts-338-    brandName,
+src/lib/products/extract-products-from-page.ts-339-    maxProducts,
+src/lib/products/extract-products-from-page.ts-340-  });
+src/lib/products/extract-products-from-page.ts-341-
+src/lib/products/extract-products-from-page.ts-342-  products.push(...retailerProducts);
+--
+src/lib/products/extract-products-from-page.ts-387-      [jsonBrand, title]
+src/lib/products/extract-products-from-page.ts-388-        .filter((value): value is string => Boolean(value))
+src/lib/products/extract-products-from-page.ts-389-        .join(" "),
+src/lib/products/extract-products-from-page.ts-390-    );
+src/lib/products/extract-products-from-page.ts-391-
+src/lib/products/extract-products-from-page.ts:392:    if (!detectedBrand || detectedBrand.slug !== brandSlug) {
+src/lib/products/extract-products-from-page.ts-393-      continue;
+src/lib/products/extract-products-from-page.ts-394-    }
+src/lib/products/extract-products-from-page.ts-395-
+src/lib/products/extract-products-from-page.ts-396-    const imageUrl = getProductImage(jsonProduct, pageUrl);
+src/lib/products/extract-products-from-page.ts-397-
+--
+src/lib/products/extract-products-from-page.ts-439-      market,
+src/lib/products/extract-products-from-page.ts-440-      currency: market === "KR" ? "KRW" : "USD",
+src/lib/products/extract-products-from-page.ts-441-
+src/lib/products/extract-products-from-page.ts-442-      gender: requestedGender,
+src/lib/products/extract-products-from-page.ts-443-
+src/lib/products/extract-products-from-page.ts:444:      brandSlug: detectedBrand.slug,
+src/lib/products/extract-products-from-page.ts-445-      brandName: detectedBrand.name || brandName,
+src/lib/products/extract-products-from-page.ts-446-
+src/lib/products/extract-products-from-page.ts-447-      productName: title,
+src/lib/products/extract-products-from-page.ts-448-      categorySlug: inferCategory(title),
+src/lib/products/extract-products-from-page.ts-449-
+--
+src/lib/products/product-repository.ts-10-
+src/lib/products/product-repository.ts-11-  market: Market;
+src/lib/products/product-repository.ts-12-  currency: Product["currency"];
+src/lib/products/product-repository.ts-13-  gender: Gender;
+src/lib/products/product-repository.ts-14-
+src/lib/products/product-repository.ts:15:  brand_slug: Product["brandSlug"];
+src/lib/products/product-repository.ts-16-  brand_name: string;
+src/lib/products/product-repository.ts-17-
+src/lib/products/product-repository.ts-18-  product_name: string;
+src/lib/products/product-repository.ts-19-  category_slug: Product["categorySlug"];
+src/lib/products/product-repository.ts-20-
+--
+src/lib/products/product-repository.ts-40-
+src/lib/products/product-repository.ts-41-  page: number;
+src/lib/products/product-repository.ts-42-  size: number;
+src/lib/products/product-repository.ts-43-
+src/lib/products/product-repository.ts-44-  sort?: ProductSort;
+src/lib/products/product-repository.ts:45:  brandSlugs?: Product["brandSlug"][];
+src/lib/products/product-repository.ts-46-  categorySlug?: Product["categorySlug"] | null;
+src/lib/products/product-repository.ts-47-}
+src/lib/products/product-repository.ts-48-
+src/lib/products/product-repository.ts-49-export interface ProductCatalogPage {
+src/lib/products/product-repository.ts-50-  products: Product[];
+--
+src/lib/products/product-repository.ts-64-  return createHash("sha256")
+src/lib/products/product-repository.ts-65-    .update(
+src/lib/products/product-repository.ts-66-      [
+src/lib/products/product-repository.ts-67-        product.market,
+src/lib/products/product-repository.ts-68-        product.gender,
+src/lib/products/product-repository.ts:69:        product.brandSlug,
+src/lib/products/product-repository.ts-70-        product.sourceUrl.trim(),
+src/lib/products/product-repository.ts-71-        product.productName.trim(),
+src/lib/products/product-repository.ts-72-      ].join("|"),
+src/lib/products/product-repository.ts-73-    )
+src/lib/products/product-repository.ts-74-    .digest("hex");
+--
+src/lib/products/product-repository.ts-82-
+src/lib/products/product-repository.ts-83-    market: product.market,
+src/lib/products/product-repository.ts-84-    currency: product.currency,
+src/lib/products/product-repository.ts-85-    gender: product.gender,
+src/lib/products/product-repository.ts-86-
+src/lib/products/product-repository.ts:87:    brand_slug: product.brandSlug,
+src/lib/products/product-repository.ts-88-    brand_name: product.brandName,
+src/lib/products/product-repository.ts-89-
+src/lib/products/product-repository.ts-90-    product_name: product.productName,
+src/lib/products/product-repository.ts-91-    category_slug: product.categorySlug,
+src/lib/products/product-repository.ts-92-
+--
+src/lib/products/product-repository.ts-116-
+src/lib/products/product-repository.ts-117-    market: row.market,
+src/lib/products/product-repository.ts-118-    currency: row.currency,
+src/lib/products/product-repository.ts-119-    gender: row.gender,
+src/lib/products/product-repository.ts-120-
+src/lib/products/product-repository.ts:121:    brandSlug: row.brand_slug,
+src/lib/products/product-repository.ts-122-    brandName: row.brand_name,
+src/lib/products/product-repository.ts-123-
+src/lib/products/product-repository.ts-124-    productName: row.product_name,
+src/lib/products/product-repository.ts-125-    categorySlug: row.category_slug,
+src/lib/products/product-repository.ts-126-
+--
+src/lib/products/product-repository.ts-183-  market,
+src/lib/products/product-repository.ts-184-  gender,
+src/lib/products/product-repository.ts-185-  page,
+src/lib/products/product-repository.ts-186-  size,
+src/lib/products/product-repository.ts-187-  sort = "discount-desc",
+src/lib/products/product-repository.ts:188:  brandSlugs = [],
+src/lib/products/product-repository.ts-189-  categorySlug = null,
+src/lib/products/product-repository.ts-190-}: ProductCatalogQuery): Promise<ProductCatalogPage> {
+src/lib/products/product-repository.ts-191-  const supabase = getSupabaseAdmin();
+src/lib/products/product-repository.ts-192-
+src/lib/products/product-repository.ts-193-  const safePage = Math.max(1, page);
+--
+src/lib/products/product-repository.ts-228-    .eq("market", market)
+src/lib/products/product-repository.ts-229-    .in("gender", [gender, "UNISEX"])
+src/lib/products/product-repository.ts-230-    .eq("is_available", true)
+src/lib/products/product-repository.ts-231-    .eq("sale_verification", "VERIFIED");
+src/lib/products/product-repository.ts-232-
+src/lib/products/product-repository.ts:233:  if (brandSlugs.length > 0) {
+src/lib/products/product-repository.ts:234:    query = query.in("brand_slug", brandSlugs);
+src/lib/products/product-repository.ts-235-  }
+src/lib/products/product-repository.ts-236-
+src/lib/products/product-repository.ts-237-  if (categorySlug) {
+src/lib/products/product-repository.ts-238-    query = query.eq("category_slug", categorySlug);
+src/lib/products/product-repository.ts-239-  }
+--
+src/lib/products/retailers/types.ts-7-  pageUrl: string;
+src/lib/products/retailers/types.ts-8-
+src/lib/products/retailers/types.ts-9-  market: Market;
+src/lib/products/retailers/types.ts-10-  requestedGender: Exclude<Gender, "UNISEX">;
+src/lib/products/retailers/types.ts-11-
+src/lib/products/retailers/types.ts:12:  brandSlug: BrandSlug;
+src/lib/products/retailers/types.ts-13-  brandName: string;
+src/lib/products/retailers/types.ts-14-
+src/lib/products/retailers/types.ts-15-  maxProducts: number;
+src/lib/products/retailers/types.ts-16-}
+src/lib/products/retailers/types.ts-17-
+--
+src/lib/products/retailers/lyst.ts-57-
+src/lib/products/retailers/lyst.ts-58-export const parseLystProducts: RetailerAdapter = ({
+src/lib/products/retailers/lyst.ts-59-  $,
+src/lib/products/retailers/lyst.ts-60-  pageUrl,
+src/lib/products/retailers/lyst.ts-61-  requestedGender,
+src/lib/products/retailers/lyst.ts:62:  brandSlug,
+src/lib/products/retailers/lyst.ts-63-  brandName,
+src/lib/products/retailers/lyst.ts-64-  maxProducts,
+src/lib/products/retailers/lyst.ts-65-}: RetailerAdapterOptions): Product[] => {
+src/lib/products/retailers/lyst.ts-66-  const products: Product[] = [];
+src/lib/products/retailers/lyst.ts-67-
+--
+src/lib/products/retailers/lyst.ts-129-      return;
+src/lib/products/retailers/lyst.ts-130-    }
+src/lib/products/retailers/lyst.ts-131-
+src/lib/products/retailers/lyst.ts-132-    const detectedBrand = inferBrand(productName);
+src/lib/products/retailers/lyst.ts-133-
+src/lib/products/retailers/lyst.ts:134:    if (!detectedBrand || detectedBrand.slug !== brandSlug) {
+src/lib/products/retailers/lyst.ts-135-      return;
+src/lib/products/retailers/lyst.ts-136-    }
+src/lib/products/retailers/lyst.ts-137-
+src/lib/products/retailers/lyst.ts-138-    /*
+src/lib/products/retailers/lyst.ts-139-     * Keep the exact offer URL tied to the price
+--
+src/lib/products/retailers/lyst.ts-183-
+src/lib/products/retailers/lyst.ts-184-      market: "US",
+src/lib/products/retailers/lyst.ts-185-      currency: "USD",
+src/lib/products/retailers/lyst.ts-186-      gender: requestedGender,
+src/lib/products/retailers/lyst.ts-187-
+src/lib/products/retailers/lyst.ts:188:      brandSlug,
+src/lib/products/retailers/lyst.ts-189-      brandName: detectedBrand.name || brandName,
+src/lib/products/retailers/lyst.ts-190-
+src/lib/products/retailers/lyst.ts-191-      productName,
+src/lib/products/retailers/lyst.ts-192-      categorySlug: inferCategory(productName),
+src/lib/products/retailers/lyst.ts-193-
+--
+src/lib/products/retailers/cafe24.ts-65-
+src/lib/products/retailers/cafe24.ts-66-export const parseCafe24Products: RetailerAdapter = ({
+src/lib/products/retailers/cafe24.ts-67-  $,
+src/lib/products/retailers/cafe24.ts-68-  pageUrl,
+src/lib/products/retailers/cafe24.ts-69-  requestedGender,
+src/lib/products/retailers/cafe24.ts:70:  brandSlug,
+src/lib/products/retailers/cafe24.ts-71-  brandName,
+src/lib/products/retailers/cafe24.ts-72-  maxProducts,
+src/lib/products/retailers/cafe24.ts-73-}): Product[] => {
+src/lib/products/retailers/cafe24.ts-74-  const products: Product[] = [];
+src/lib/products/retailers/cafe24.ts-75-
+--
+src/lib/products/retailers/cafe24.ts-106-      return;
+src/lib/products/retailers/cafe24.ts-107-    }
+src/lib/products/retailers/cafe24.ts-108-
+src/lib/products/retailers/cafe24.ts-109-    const detectedBrand = inferBrand(`${brandName} ${name}`);
+src/lib/products/retailers/cafe24.ts-110-
+src/lib/products/retailers/cafe24.ts:111:    if (!detectedBrand || detectedBrand.slug !== brandSlug) {
+src/lib/products/retailers/cafe24.ts-112-      return;
+src/lib/products/retailers/cafe24.ts-113-    }
+src/lib/products/retailers/cafe24.ts-114-
+src/lib/products/retailers/cafe24.ts-115-    /*
+src/lib/products/retailers/cafe24.ts-116-     * Restrict price parsing to the product card,
+--
+src/lib/products/retailers/cafe24.ts-180-
+src/lib/products/retailers/cafe24.ts-181-      market: "KR",
+src/lib/products/retailers/cafe24.ts-182-      currency: "KRW",
+src/lib/products/retailers/cafe24.ts-183-      gender: requestedGender,
+src/lib/products/retailers/cafe24.ts-184-
+src/lib/products/retailers/cafe24.ts:185:      brandSlug,
+src/lib/products/retailers/cafe24.ts-186-      brandName: detectedBrand.name || brandName,
+src/lib/products/retailers/cafe24.ts-187-
+src/lib/products/retailers/cafe24.ts-188-      productName: name,
+src/lib/products/retailers/cafe24.ts-189-      categorySlug: inferCategory(name),
+src/lib/products/retailers/cafe24.ts-190-
+--
+src/lib/products/sources/cafe24-search.ts-52-      $,
+src/lib/products/sources/cafe24-search.ts-53-      html,
+src/lib/products/sources/cafe24-search.ts-54-      pageUrl,
+src/lib/products/sources/cafe24-search.ts-55-      market: "KR",
+src/lib/products/sources/cafe24-search.ts-56-      requestedGender: "MEN",
+src/lib/products/sources/cafe24-search.ts:57:      brandSlug: brand.slug,
+src/lib/products/sources/cafe24-search.ts-58-      brandName: brand.englishName,
+src/lib/products/sources/cafe24-search.ts-59-      maxProducts: 200,
+src/lib/products/sources/cafe24-search.ts-60-    });
+src/lib/products/sources/cafe24-search.ts-61-
+src/lib/products/sources/cafe24-search.ts-62-    if (parsed.length === 0) {
+--
+src/lib/products/sources/hbx.ts-180-
+src/lib/products/sources/hbx.ts-181-    market: "US",
+src/lib/products/sources/hbx.ts-182-    currency: "USD",
+src/lib/products/sources/hbx.ts-183-    gender: resolveGender(`${genderText} ${name}`, "UNISEX"),
+src/lib/products/sources/hbx.ts-184-
+src/lib/products/sources/hbx.ts:185:    brandSlug: detectedBrand.slug,
+src/lib/products/sources/hbx.ts-186-    brandName: detectedBrand.name,
+src/lib/products/sources/hbx.ts-187-
+src/lib/products/sources/hbx.ts-188-    productName: name,
+src/lib/products/sources/hbx.ts-189-    categorySlug: inferCategory(name),
+src/lib/products/sources/hbx.ts-190-
+--
+src/lib/collectors/types.ts-9-  sourceId: string;
+src/lib/collectors/types.ts-10-  sourceName: string;
+src/lib/collectors/types.ts-11-  sourceUrl: string;
+src/lib/collectors/types.ts-12-
+src/lib/collectors/types.ts-13-  title: string;
+src/lib/collectors/types.ts:14:  brandSlug: BrandSlug;
+src/lib/collectors/types.ts-15-  brandName: string;
+src/lib/collectors/types.ts-16-
+src/lib/collectors/types.ts-17-  category: ProductCategory;
+src/lib/collectors/types.ts-18-  gender: Gender;
+src/lib/collectors/types.ts-19-
+--
+src/lib/collectors/types.ts-51-
+src/lib/collectors/types.ts-52-    market: "KR",
+src/lib/collectors/types.ts-53-    currency: "KRW",
+src/lib/collectors/types.ts-54-    gender: raw.gender,
+src/lib/collectors/types.ts-55-
+src/lib/collectors/types.ts:56:    brandSlug: raw.brandSlug,
+src/lib/collectors/types.ts-57-    brandName: raw.brandName,
+src/lib/collectors/types.ts-58-
+src/lib/collectors/types.ts-59-    productName: raw.title,
+src/lib/collectors/types.ts-60-    categorySlug: raw.category,
+src/lib/collectors/types.ts-61-
+--
+src/lib/products/sources/garmentory.ts-107-     * Garmentory paths encode gender, e.g.
+src/lib/products/sources/garmentory.ts-108-     * /sale/lemaire/mens-slip-on/... or /sale/lemaire/womens-dresses/...
+src/lib/products/sources/garmentory.ts-109-     */
+src/lib/products/sources/garmentory.ts-110-    gender: resolveGender(`${path} ${name}`, "UNISEX"),
+src/lib/products/sources/garmentory.ts-111-
+src/lib/products/sources/garmentory.ts:112:    brandSlug: detectedBrand.slug,
+src/lib/products/sources/garmentory.ts-113-    brandName: detectedBrand.name,
+src/lib/products/sources/garmentory.ts-114-
+src/lib/products/sources/garmentory.ts-115-    productName: name,
+src/lib/products/sources/garmentory.ts-116-    categorySlug: inferCategory(`${name} ${path}`),
+src/lib/products/sources/garmentory.ts-117-
+--
+src/types/product.ts-20-
+src/types/product.ts-21-  market: Market;
+src/types/product.ts-22-  currency: Currency;
+src/types/product.ts-23-  gender: Gender;
+src/types/product.ts-24-
+src/types/product.ts:25:  brandSlug: BrandSlug;
+src/types/product.ts-26-  brandName: string;
+src/types/product.ts-27-
+src/types/product.ts-28-  productName: string;
+src/types/product.ts-29-  categorySlug: Exclude<CategorySlug, "all">;
+src/types/product.ts-30-
+--
+src/components/home/HomeClient.tsx-32-
+src/components/home/HomeClient.tsx-33-  const products = useMemo(() => {
+src/components/home/HomeClient.tsx-34-    const filtered = (data?.products ?? []).filter((product) => {
+src/components/home/HomeClient.tsx-35-      const matchesBrand =
+src/components/home/HomeClient.tsx-36-        selectedBrands.length === 0 ||
+src/components/home/HomeClient.tsx:37:        selectedBrands.includes(product.brandSlug);
+src/components/home/HomeClient.tsx-38-
+src/components/home/HomeClient.tsx-39-      const matchesCategory =
+src/components/home/HomeClient.tsx-40-        selectedCategory === "all" || product.categorySlug === selectedCategory;
+src/components/home/HomeClient.tsx-41-
+src/components/home/HomeClient.tsx-42-      return (
+--
+src/components/home/HomeClient.tsx-99-        className="fixed bottom-6 right-6 z-50 inline-flex min-h-12 items-center justify-center rounded-full bg-black px-6 py-3 text-sm font-bold !text-white shadow-lg transition hover:bg-neutral-700"
+src/components/home/HomeClient.tsx-100-      >
+src/components/home/HomeClient.tsx-101-        Clothing Blog
+src/components/home/HomeClient.tsx-102-      </Link>
+src/components/home/HomeClient.tsx-103-      <Header
+src/components/home/HomeClient.tsx:104:        market={market}
+src/components/home/HomeClient.tsx-105-        gender={gender}
+src/components/home/HomeClient.tsx-106-        onMarketChange={(nextMarket) => {
+src/components/home/HomeClient.tsx-107-          setMarket(nextMarket);
+src/components/home/HomeClient.tsx-108-          clearFilters();
+src/components/home/HomeClient.tsx-109-        }}
+--
+src/components/home/HomeClient.tsx-114-        onMenuOpen={() => setSidebarOpen(true)}
+src/components/home/HomeClient.tsx-115-      />
+src/components/home/HomeClient.tsx-116-
+src/components/home/HomeClient.tsx-117-      <Sidebar
+src/components/home/HomeClient.tsx-118-        open={sidebarOpen}
+src/components/home/HomeClient.tsx:119:        market={market}
+src/components/home/HomeClient.tsx-120-        selectedBrands={selectedBrands}
+src/components/home/HomeClient.tsx-121-        selectedCategory={selectedCategory}
+src/components/home/HomeClient.tsx-122-        onClose={() => setSidebarOpen(false)}
+src/components/home/HomeClient.tsx-123-        onBrandToggle={toggleBrand}
+src/components/home/HomeClient.tsx-124-        onCategoryChange={setSelectedCategory}
+--
+src/lib/collectors/utils/product-json-ld.ts-155-        sourceId,
+src/lib/collectors/utils/product-json-ld.ts-156-        sourceName: options.sourceName,
+src/lib/collectors/utils/product-json-ld.ts-157-        sourceUrl,
+src/lib/collectors/utils/product-json-ld.ts-158-
+src/lib/collectors/utils/product-json-ld.ts-159-        title,
+src/lib/collectors/utils/product-json-ld.ts:160:        brandSlug: brand.slug,
+src/lib/collectors/utils/product-json-ld.ts-161-        brandName: brand.name,
+src/lib/collectors/utils/product-json-ld.ts-162-
+src/lib/collectors/utils/product-json-ld.ts-163-        category: inferCategory(title),
+src/lib/collectors/utils/product-json-ld.ts-164-        gender: inferGender(
+src/lib/collectors/utils/product-json-ld.ts-165-          title,
+--
+src/lib/products/sources/okmall.ts-122-
+src/lib/products/sources/okmall.ts-123-      market: "KR",
+src/lib/products/sources/okmall.ts-124-      currency: "KRW",
+src/lib/products/sources/okmall.ts-125-      gender: resolveGender(card.text(), "UNISEX"),
+src/lib/products/sources/okmall.ts-126-
+src/lib/products/sources/okmall.ts:127:      brandSlug: detectedBrand.slug,
+src/lib/products/sources/okmall.ts-128-      brandName: detectedBrand.name,
+src/lib/products/sources/okmall.ts-129-
+src/lib/products/sources/okmall.ts-130-      productName: title,
+src/lib/products/sources/okmall.ts-131-      categorySlug: inferCategory(title),
+src/lib/products/sources/okmall.ts-132-
+--
+src/app/api/products/route.ts-482-    market,
+src/app/api/products/route.ts-483-    currency: market === "KR" ? "KRW" : "USD",
+src/app/api/products/route.ts-484-
+src/app/api/products/route.ts-485-    gender: requestedGender,
+src/app/api/products/route.ts-486-
+src/app/api/products/route.ts:487:    brandSlug: detectedBrand.slug,
+src/app/api/products/route.ts-488-    brandName: detectedBrand.name,
+src/app/api/products/route.ts-489-
+src/app/api/products/route.ts-490-    productName: title,
+src/app/api/products/route.ts-491-    categorySlug: inferCategory(text),
+src/app/api/products/route.ts-492-
+--
+src/app/api/products/route.ts-929-      pageLimit(() =>
+src/app/api/products/route.ts-930-        extractProductsFromPage({
+src/app/api/products/route.ts-931-          pageUrl: result.url,
+src/app/api/products/route.ts-932-          market,
+src/app/api/products/route.ts-933-          requestedGender: gender,
+src/app/api/products/route.ts:934:          brandSlug: brand.slug,
+src/app/api/products/route.ts-935-          brandName: brand.englishName,
+src/app/api/products/route.ts-936-          maxProducts: 150,
+src/app/api/products/route.ts-937-        }),
+src/app/api/products/route.ts-938-      ),
+src/app/api/products/route.ts-939-    ),
+--
+src/lib/products/sources/shopify.ts-168-
+src/lib/products/sources/shopify.ts-169-    market: "US",
+src/lib/products/sources/shopify.ts-170-    currency: "USD",
+src/lib/products/sources/shopify.ts-171-    gender: resolveGender(genderText, store.defaultGender),
+src/lib/products/sources/shopify.ts-172-
+src/lib/products/sources/shopify.ts:173:    brandSlug: detectedBrand.slug,
+src/lib/products/sources/shopify.ts-174-    brandName: detectedBrand.name,
+src/lib/products/sources/shopify.ts-175-
+src/lib/products/sources/shopify.ts-176-    productName: title,
+src/lib/products/sources/shopify.ts-177-    categorySlug: inferCategory(`${title} ${raw.product_type ?? ""}`),
+src/lib/products/sources/shopify.ts-178-
+--
+src/hooks/use-products.ts-46-    size: "300",
+src/hooks/use-products.ts-47-    sort: "discount-desc",
+src/hooks/use-products.ts-48-  });
+src/hooks/use-products.ts-49-
+src/hooks/use-products.ts-50-  return useSWR<ProductResponse>(
+src/hooks/use-products.ts:51:    `/api/catalog/products?${query.toString()}`,
+src/hooks/use-products.ts-52-    fetcher,
+src/hooks/use-products.ts-53-    {
+src/hooks/use-products.ts-54-      revalidateOnFocus: false,
+src/hooks/use-products.ts-55-      revalidateOnReconnect: false,
+src/hooks/use-products.ts-56-      dedupingInterval: 5 * 60 * 1000,
+--
+src/app/api/cron/refresh-products/route.ts-42-
+src/app/api/cron/refresh-products/route.ts-43-  const market = marketValue === "KR" ? "KR" : "US";
+src/app/api/cron/refresh-products/route.ts-44-
+src/app/api/cron/refresh-products/route.ts-45-  const gender = genderValue === "WOMEN" ? "WOMEN" : "MEN";
+src/app/api/cron/refresh-products/route.ts-46-
+src/app/api/cron/refresh-products/route.ts:47:  const refreshUrl = new URL("/api/products", request.nextUrl.origin);
+src/app/api/cron/refresh-products/route.ts-48-
+src/app/api/cron/refresh-products/route.ts-49-  refreshUrl.searchParams.set("market", market);
+src/app/api/cron/refresh-products/route.ts-50-
+src/app/api/cron/refresh-products/route.ts-51-  refreshUrl.searchParams.set("gender", gender);
+src/app/api/cron/refresh-products/route.ts-52-
+--
+src/proxy.ts-17-    /*
+src/proxy.ts-18-     * api/account is excluded because those routes authenticate
+src/proxy.ts-19-     * themselves and must answer with JSON — a redirect to the login
+src/proxy.ts-20-     * page would hand the browser HTML to parse.
+src/proxy.ts-21-     */
+src/proxy.ts:22:    "/((?!login|api/auth|api/account|api/cron|api/products|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+src/proxy.ts-23-  ],
+src/proxy.ts-24-};
+--
+src/app/api/catalog/products/route.ts-53-    const size = Math.min(
+src/app/api/catalog/products/route.ts-54-      300,
+src/app/api/catalog/products/route.ts-55-      parsePositiveInteger(parameters.get("size"), 60),
+src/app/api/catalog/products/route.ts-56-    );
+src/app/api/catalog/products/route.ts-57-
+src/app/api/catalog/products/route.ts:58:    const brandSlugs = parameters.getAll("brand").filter(Boolean);
+src/app/api/catalog/products/route.ts-59-
+src/app/api/catalog/products/route.ts-60-    const categorySlug = parameters.get("category");
+src/app/api/catalog/products/route.ts-61-
+src/app/api/catalog/products/route.ts-62-    const result = await getProductsPage({
+src/app/api/catalog/products/route.ts-63-      market,
+src/app/api/catalog/products/route.ts-64-      gender,
+src/app/api/catalog/products/route.ts-65-      page,
+src/app/api/catalog/products/route.ts-66-      size,
+src/app/api/catalog/products/route.ts-67-      sort,
+src/app/api/catalog/products/route.ts:68:      brandSlugs: brandSlugs as Parameters<
+src/app/api/catalog/products/route.ts-69-        typeof getProductsPage
+src/app/api/catalog/products/route.ts:70:      >[0]["brandSlugs"],
+src/app/api/catalog/products/route.ts-71-      categorySlug:
+src/app/api/catalog/products/route.ts-72-        categorySlug && categorySlug !== "all"
+src/app/api/catalog/products/route.ts-73-          ? (categorySlug as Parameters<
+src/app/api/catalog/products/route.ts-74-              typeof getProductsPage
+src/app/api/catalog/products/route.ts-75-            >[0]["categorySlug"])
+=== DEVELOPMENT LOG ===
+
+> crazy_sajangnim@0.1.0 dev
+> next dev --webpack
+
+▲ Next.js 16.2.11 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.0.53:3000
+- Environments: .env.local
+✓ Ready in 180ms
+
+ GET / 200 in 2.3s (next.js: 1621ms, proxy.ts: 132ms, application-code: 528ms)
+ GET / 200 in 110ms (next.js: 21ms, proxy.ts: 66ms, application-code: 23ms)
+ GET /api/catalog/products?market=US&gender=MEN&page=1&size=300&sort=discount-desc 200 in 736ms (next.js: 464ms, proxy.ts: 73ms, application-code: 199ms)
+ GET /api/account/me 200 in 776ms (next.js: 401ms, application-code: 375ms)
+ GET /api/account/me 200 in 780ms (next.js: 401ms, application-code: 379ms)
+ GET /api/account/me 200 in 865ms (next.js: 473ms, application-code: 391ms)
+ POST /api/account/login-metadata 200 in 385ms (next.js: 236ms, application-code: 150ms)

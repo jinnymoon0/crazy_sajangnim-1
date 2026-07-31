@@ -1,6 +1,8 @@
 "use client";
 
 import { X } from "lucide-react";
+import { useEffect, useState } from "react";
+
 import { BRANDS, type BrandSlug } from "@/constants/brands";
 import {
   CATEGORIES,
@@ -29,6 +31,48 @@ export function Sidebar({
   onCategoryChange,
   onClearFilters,
 }: SidebarProps) {
+  /*
+   * Brands are managed in the admin, so read the live list; the shipped
+   * constant is the fallback while it loads or if the request fails.
+   */
+  const [brands, setBrands] = useState<
+    { slug: string; englishName: string; koreanName: string | null }[]
+  >(() =>
+    BRANDS.map((brand) => ({
+      slug: brand.slug,
+      englishName: brand.englishName,
+      koreanName: brand.koreanName,
+    })),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/catalog/brands");
+        const body = (await response.json()) as {
+          brands?: {
+            slug: string;
+            englishName: string;
+            koreanName: string | null;
+          }[];
+        };
+
+        if (!cancelled && body.brands?.length) {
+          setBrands(body.brands);
+        }
+      } catch {
+        // Keep the shipped list.
+      }
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
   return (
     <>
       <button
@@ -76,7 +120,7 @@ export function Sidebar({
           </div>
 
           <div className="space-y-3">
-            {BRANDS.map((brand) => (
+            {brands.map((brand) => (
               <label
                 key={brand.slug}
                 className="flex cursor-pointer items-center justify-between gap-4 text-sm"
