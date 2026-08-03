@@ -204,11 +204,18 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 {post.image_urls.length === 1 ? "photo" : "photos"}
               </div>
 
-              <BlogPostManagement
-                postId={post.id}
-                initialTitle={post.title}
-                initialContent={post.content}
-              />
+              {/*
+                Only the writer sees the edit and delete controls. The
+                route checks this too — hiding the button would leave it
+                open to anyone calling the API directly.
+              */}
+              {post.author_name === user.username ? (
+                <BlogPostManagement
+                  postId={post.id}
+                  initialTitle={post.title}
+                  initialContent={post.content}
+                />
+              ) : null}
             </div>
           </div>
         </article>
