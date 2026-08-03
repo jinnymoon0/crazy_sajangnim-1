@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import AccountMenu from "@/components/auth/AccountMenu";
 import BlogFeed from "@/components/blog/BlogFeed";
+import { getEngagementByPost } from "@/lib/blog/engagement";
 import BlogPostForm from "@/components/blog/BlogPostForm";
 import { requireOnboardedUser } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -37,6 +38,7 @@ export default async function BlogPage() {
   const user = await requireOnboardedUser();
 
   const posts = await getBlogPosts();
+  const engagement = await getEngagementByPost();
 
   return (
     <main className="min-h-screen bg-neutral-100">
@@ -77,7 +79,10 @@ export default async function BlogPage() {
             <BlogPostForm username={user.username} />
           </div>
 
-          <BlogFeed posts={posts} />
+          <BlogFeed
+            posts={posts}
+            engagement={Object.fromEntries(engagement)}
+          />
         </div>
       </div>
     </main>
