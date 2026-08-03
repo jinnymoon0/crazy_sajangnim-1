@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import AccountMenu from "@/components/auth/AccountMenu";
 import BlogFeed from "@/components/blog/BlogFeed";
+import { displayName } from "@/lib/blog/authorship";
+import { getCurrentUsernames } from "@/lib/blog/current-names";
 import { getEngagementByPost } from "@/lib/blog/engagement";
 import BlogPostForm from "@/components/blog/BlogPostForm";
 import { requireOnboardedUser } from "@/lib/auth/session";
@@ -17,7 +19,7 @@ async function getBlogPosts(): Promise<BlogPost[]> {
     const { data, error } = await supabase
       .from("blog_posts")
       .select(
-        "id, title, content, author_name, image_url, image_path, image_urls, image_paths, created_at",
+        "id, title, content, author_name, user_id, image_url, image_path, image_urls, image_paths, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(100);
@@ -27,7 +29,21 @@ async function getBlogPosts(): Promise<BlogPost[]> {
       return [];
     }
 
-    return (data ?? []) as BlogPost[];
+    const posts = (data ?? []) as BlogPost[];
+
+    /*
+     * Show what each writer is called now rather than the name stored
+     * when they posted, so a rename carries across their whole history.
+     */
+    const names = await getCurrentUsernames(posts.map((p) => p.user_id ?? null));
+
+    return posts.map((post) => ({
+      ...post,
+      author_name: displayName(
+        { user_id: post.user_id ?? null, author_name: post.author_name },
+        names,
+      ),
+    }));
   } catch (error) {
     console.error("Blog configuration error:", error);
     return [];
