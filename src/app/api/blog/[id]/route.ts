@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { getAuthState } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -14,9 +15,40 @@ type RouteContext = {
 
 type StoredPost = {
   id: string;
+  author_name: string | null;
   image_path: string | null;
   image_paths: string[] | null;
 };
+
+/*
+ * A post may only be changed by the person who wrote it. Checked here
+ * rather than only in the page, because hiding the button leaves the
+ * route open to anyone who calls it directly.
+ *
+ * Authorship is the stored author_name, which is the username at the
+ * time of writing; usernames are unique, so it identifies one account.
+ */
+async function denyUnlessAuthor(
+  post: StoredPost,
+): Promise<NextResponse | null> {
+  const state = await getAuthState();
+
+  if (!state.authenticated || !state.username) {
+    return NextResponse.json(
+      { error: "Please sign in." },
+      { status: 401 },
+    );
+  }
+
+  if (post.author_name !== state.username) {
+    return NextResponse.json(
+      { error: "Only the person who wrote this post can change it." },
+      { status: 403 },
+    );
+  }
+
+  return null;
+}
 
 const updatePostSchema = z.object({
   title: z
@@ -51,7 +83,7 @@ async function getStoredPost(id: string): Promise<StoredPost | null> {
 
   const { data, error } = await supabase
     .from("blog_posts")
-    .select("id, image_path, image_paths")
+    .select("id, author_name, image_path, image_paths")
     .eq("id", id)
     .maybeSingle();
 
@@ -103,6 +135,12 @@ export async function PATCH(
         { error: "The post could not be found." },
         { status: 404 },
       );
+    }
+
+    const denied = await denyUnlessAuthor(existingPost);
+
+    if (denied) {
+      return denied;
     }
 
     const supabase = getSupabaseAdmin();
@@ -167,6 +205,12 @@ export async function DELETE(
         { error: "The post could not be found." },
         { status: 404 },
       );
+    }
+
+    const denied = await denyUnlessAuthor(post);
+
+    if (denied) {
+      return denied;
     }
 
     const storedPaths = Array.isArray(post.image_paths)
