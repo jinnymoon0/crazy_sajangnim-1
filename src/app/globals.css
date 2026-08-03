@@ -44,9 +44,9 @@ button {
 }
 
 .font-diploma {
-  /* Blackletter has one weight; asking for bold would have the browser
-     smear it rather than pick a heavier cut. */
+  /* The face is loaded at one weight; asking for another would have the
+     browser smear a fake bold over it. */
   font-family: var(--font-blackletter), "Times New Roman", Georgia, serif;
-  font-weight: 400;
+  font-weight: 600;
   letter-spacing: 0.02em;
 }
