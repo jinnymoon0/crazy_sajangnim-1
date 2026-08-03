@@ -108,6 +108,31 @@ export async function POST(request: Request) {
 
     const today = new Date().toISOString().slice(0, 10);
 
+    /*
+     * Someone who signs in names everything this browser did before.
+     * The cookie is the same one they were carrying while anonymous, so
+     * their earlier visits and pages can be attached to the account now
+     * that there is one.
+     *
+     * This is the only way an unnamed visitor ever gains a name: nothing
+     * about an anonymous request says who is holding the phone.
+     */
+    if (state.userId) {
+      await Promise.all([
+        supabase
+          .from("site_visits")
+          .update({ user_id: state.userId })
+          .eq("visitor_id", visitorId)
+          .is("user_id", null),
+
+        supabase
+          .from("site_page_views")
+          .update({ user_id: state.userId })
+          .eq("visitor_id", visitorId)
+          .is("user_id", null),
+      ]);
+    }
+
     const { data: seen, error: readError } = await supabase
       .from("site_visits")
       .select("id, page_views")
