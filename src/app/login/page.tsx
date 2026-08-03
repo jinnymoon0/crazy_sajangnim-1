@@ -9,16 +9,28 @@ export const dynamic = "force-dynamic";
 type LoginPageProps = {
   searchParams: Promise<{
     error?: string;
+    callbackUrl?: string;
   }>;
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const { error } = await searchParams;
+  const { error, callbackUrl } = await searchParams;
+
+  /*
+   * Only our own paths: a callback taken from the query could otherwise
+   * be pointed at another site and turn the login into a redirector.
+   */
+  const safeCallback =
+    callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
+      ? callbackUrl
+      : null;
 
   const authState = await getAuthState();
 
   if (authState.authenticated) {
-    redirect(authState.username ? "/" : "/choose-username");
+    redirect(
+      authState.username ? (safeCallback ?? "/") : "/choose-username",
+    );
   }
 
   return (
@@ -44,7 +56,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </p>
         ) : null}
 
-        <GoogleSignInButton />
+        <GoogleSignInButton callbackUrl={safeCallback} />
 
         <p className="mt-4 text-center text-xs leading-5 text-neutral-500">
           First time here? After signing in you will pick a username —
