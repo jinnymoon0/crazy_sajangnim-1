@@ -20,20 +20,18 @@ export interface Viewer {
 /*
  * True when this viewer wrote it.
  *
- * The id is checked first and alone: once a row has one, the stored
- * name is a stale label and must not be allowed to grant access — two
- * accounts can hold the same name in turn, if the first is deleted and
- * the second claims it.
+ * Only the account id counts. The stored name is never enough: a
+ * username is unique among accounts that exist, not across time, so
+ * deleting an account frees its name for anyone else to claim. Reading
+ * the name as proof of authorship would hand that person everything the
+ * first one wrote.
  *
- * Only rows with no id fall back to the name, which is the best that
- * can be said about writing that predates the column.
+ * Rows with no id are therefore editable by nobody. They are writing
+ * from before the id was recorded whose account has since gone — the
+ * author cannot be established, so no one should be trusted as them.
  */
 export function isAuthor(row: StoredAuthorship, viewer: Viewer): boolean {
-  if (row.user_id) {
-    return row.user_id === viewer.id;
-  }
-
-  return Boolean(row.author_name) && row.author_name === viewer.username;
+  return Boolean(row.user_id) && row.user_id === viewer.id;
 }
 
 /*
