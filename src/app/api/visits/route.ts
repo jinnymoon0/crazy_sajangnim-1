@@ -16,6 +16,9 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 const visitSchema = z.object({
   landingPath: z.string().trim().max(300).nullish(),
+  /* Where in the shop, when a storefront is on screen. */
+  market: z.enum(["US", "KR"]).nullish(),
+  gender: z.enum(["MEN", "WOMEN"]).nullish(),
   referrer: z.string().trim().max(500).nullish(),
   timezone: z.string().trim().max(80).nullish(),
   browserLanguage: z.string().trim().max(40).nullish(),
@@ -24,6 +27,15 @@ const visitSchema = z.object({
   cpuCores: z.number().int().min(1).max(1024).nullish(),
   deviceMemoryGb: z.number().min(0).max(1024).nullish(),
   connectionType: z.string().trim().max(40).nullish(),
+  viewportSize: z.string().trim().max(40).nullish(),
+  languages: z.array(z.string().trim().max(35)).max(12).nullish(),
+  maxTouchPoints: z.number().int().min(0).max(64).nullish(),
+  doNotTrack: z.boolean().nullish(),
+  utmSource: z.string().trim().max(120).nullish(),
+  utmMedium: z.string().trim().max(120).nullish(),
+  utmCampaign: z.string().trim().max(120).nullish(),
+  utmTerm: z.string().trim().max(120).nullish(),
+  utmContent: z.string().trim().max(120).nullish(),
 });
 
 function header(request: Request, name: string): string | null {
@@ -115,7 +127,28 @@ export async function POST(request: Request) {
       throw new Error(readError.message);
     }
 
+    /*
+     * Every page opened, not just how many. Written for each call, so
+     * three page views can be read as which three.
+     */
+    const recordPageView = async () => {
+      const { error } = await supabase.from("site_page_views").insert({
+        visitor_id: visitorId,
+        user_id: state.userId ?? null,
+        path: parsed.data.landingPath ?? "/",
+        referrer: parsed.data.referrer ?? null,
+        market: parsed.data.market ?? null,
+        gender: parsed.data.gender ?? null,
+      });
+
+      if (error && error.code !== "42P01" && error.code !== "PGRST205") {
+        console.error("Page view record failed:", error.message);
+      }
+    };
+
     if (seen) {
+      await recordPageView();
+
       await supabase
         .from("site_visits")
         .update({
@@ -126,10 +159,21 @@ export async function POST(request: Request) {
         })
         .eq("id", seen.id);
     } else {
+      /*
+       * Seen on an earlier day means this is a return, which is worth
+       * knowing separately from the day's own count.
+       */
+      const { count: earlier } = await supabase
+        .from("site_visits")
+        .select("id", { count: "exact", head: true })
+        .eq("visitor_id", visitorId)
+        .lt("visit_date", today);
+
       const { error: insertError } = await supabase
         .from("site_visits")
         .insert({
           visitor_id: visitorId,
+          is_returning: (earlier ?? 0) > 0,
           user_id: state.userId ?? null,
           visit_date: today,
           ip_address: getClientIp(request),
@@ -148,12 +192,23 @@ export async function POST(request: Request) {
           cpu_cores: parsed.data.cpuCores ?? null,
           device_memory_gb: parsed.data.deviceMemoryGb ?? null,
           connection_type: parsed.data.connectionType ?? null,
+          viewport_size: parsed.data.viewportSize ?? null,
+          languages: parsed.data.languages ?? null,
+          max_touch_points: parsed.data.maxTouchPoints ?? null,
+          do_not_track: parsed.data.doNotTrack ?? null,
+          utm_source: parsed.data.utmSource ?? null,
+          utm_medium: parsed.data.utmMedium ?? null,
+          utm_campaign: parsed.data.utmCampaign ?? null,
+          utm_term: parsed.data.utmTerm ?? null,
+          utm_content: parsed.data.utmContent ?? null,
         });
 
       // Another tab got there first; its row counts for both.
       if (insertError && insertError.code !== "23505") {
         throw new Error(insertError.message);
       }
+
+      await recordPageView();
     }
 
     const response = NextResponse.json({ recorded: true });
