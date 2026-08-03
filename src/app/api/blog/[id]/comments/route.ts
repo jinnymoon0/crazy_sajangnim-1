@@ -22,6 +22,9 @@ const commentSchema = z.object({
     .trim()
     .min(1, "Please enter a comment.")
     .max(1000, "The comment must be 1,000 characters or fewer."),
+
+  // The comment being replied to, for 대댓글.
+  parentId: z.string().uuid().nullish(),
 });
 
 function isSameOriginRequest(request: Request): boolean {
@@ -51,7 +54,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     const { data, error } = await supabase
       .from("blog_comments")
-      .select("id, post_id, author_name, content, created_at")
+      .select("id, post_id, author_name, user_id, parent_id, content, created_at")
       .eq("post_id", id)
       .order("created_at", { ascending: true })
       .limit(MAX_COMMENTS);
@@ -168,15 +171,52 @@ export async function POST(request: Request, context: RouteContext) {
       );
     }
 
+    /*
+     * Replies sit one level deep. Someone answering a reply is answering
+     * the thread, so walk up to its root rather than nesting further —
+     * a thread that keeps indenting is unreadable on a phone.
+     */
+    let parentId: string | null = null;
+
+    if (parsed.data.parentId) {
+      const { data: parent, error: parentError } = await supabase
+        .from("blog_comments")
+        .select("id, post_id, parent_id")
+        .eq("id", parsed.data.parentId)
+        .maybeSingle();
+
+      if (parentError) {
+        console.error("Reply parent lookup failed:", parentError.message);
+
+        return NextResponse.json(
+          { error: "Failed to save the comment." },
+          { status: 500 },
+        );
+      }
+
+      // Belonging to this post matters: the id comes from the browser.
+      if (!parent || parent.post_id !== id) {
+        return NextResponse.json(
+          { error: "The comment being replied to could not be found." },
+          { status: 404 },
+        );
+      }
+
+      parentId = parent.parent_id ?? parent.id;
+    }
+
     const { data: comment, error: insertError } = await supabase
       .from("blog_comments")
       .insert({
         post_id: id,
         author_name: sessionUser.username,
         user_id: sessionUser.id,
+        parent_id: parentId,
         content: parsed.data.content,
       })
-      .select("id, post_id, author_name, content, created_at")
+      .select(
+        "id, post_id, author_name, user_id, parent_id, content, created_at",
+      )
       .single();
 
     if (insertError) {

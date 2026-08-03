@@ -101,7 +101,7 @@ async function getBlogComments(postId: string): Promise<CommentsResult> {
 
   const { data, error } = await supabase
     .from("blog_comments")
-    .select("id, post_id, author_name, user_id, content, created_at")
+    .select("id, post_id, author_name, user_id, parent_id, content, created_at")
     .eq("post_id", postId)
     .order("created_at", { ascending: true })
     .limit(200);
