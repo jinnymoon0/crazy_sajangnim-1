@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+
+import { compressImageForUpload } from "@/lib/images/compress-image";
 
 const TOPICS = [
   { value: "brand", label: "Request a brand" },
@@ -12,6 +14,15 @@ type Topic = (typeof TOPICS)[number]["value"];
 
 const MAX_LENGTH = 2000;
 
+const MAX_PHOTOS = 4;
+
+const PLACEHOLDER = "Report any bug or request to add a new brand!";
+
+interface Attachment {
+  file: File;
+  previewUrl: string;
+}
+
 export default function ContactUs() {
   const [open, setOpen] = useState(false);
   const [topic, setTopic] = useState<Topic>("brand");
@@ -19,9 +30,12 @@ export default function ContactUs() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [photos, setPhotos] = useState<Attachment[]>([]);
+  const [isPreparing, setIsPreparing] = useState(false);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) {
@@ -41,10 +55,77 @@ export default function ContactUs() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
+  function clearPhotos() {
+    // Object URLs are held by the browser until revoked.
+    for (const photo of photos) {
+      URL.revokeObjectURL(photo.previewUrl);
+    }
+
+    setPhotos([]);
+  }
+
   function close() {
     setOpen(false);
     setError(null);
     setSent(false);
+    clearPhotos();
+  }
+
+  function removePhoto(index: number) {
+    setPhotos((current) => {
+      const removed = current[index];
+
+      if (removed) {
+        URL.revokeObjectURL(removed.previewUrl);
+      }
+
+      return current.filter((_, i) => i !== index);
+    });
+  }
+
+  /*
+   * Shrink in the browser before sending. Phone photos are far larger
+   * than a serverless request body may carry, and re-encoding turns an
+   * iPhone HEIC into a JPEG that every browser can display.
+   */
+  async function handleFiles(event: ChangeEvent<HTMLInputElement>) {
+    const chosen = Array.from(event.target.files ?? []);
+
+    event.target.value = "";
+
+    if (chosen.length === 0) {
+      return;
+    }
+
+    const room = MAX_PHOTOS - photos.length;
+
+    if (room <= 0) {
+      setError(`You can attach up to ${MAX_PHOTOS} photos.`);
+
+      return;
+    }
+
+    setError(chosen.length > room ? `Only the first ${room} were added.` : null);
+    setIsPreparing(true);
+
+    try {
+      const prepared = await Promise.all(
+        chosen.slice(0, room).map(async (file) => {
+          const compressed = await compressImageForUpload(file);
+
+          return {
+            file: compressed,
+            previewUrl: URL.createObjectURL(compressed),
+          };
+        }),
+      );
+
+      setPhotos((current) => [...current, ...prepared]);
+    } catch {
+      setError("That photo could not be prepared. Please try another.");
+    } finally {
+      setIsPreparing(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -62,10 +143,18 @@ export default function ContactUs() {
     setError(null);
 
     try {
+      const form = new FormData();
+
+      form.set("topic", topic);
+      form.set("message", trimmed);
+
+      for (const photo of photos) {
+        form.append("images", photo.file, photo.file.name);
+      }
+
       const response = await fetch("/api/contact", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, message: trimmed }),
+        body: form,
       });
 
       const body = (await response.json().catch(() => null)) as {
@@ -86,6 +175,7 @@ export default function ContactUs() {
 
       setSent(true);
       setMessage("");
+      clearPhotos();
     } catch {
       setError("The message could not be sent. Please try again.");
     } finally {
@@ -211,13 +301,7 @@ export default function ContactUs() {
                   onChange={(event) => setMessage(event.target.value)}
                   maxLength={MAX_LENGTH}
                   rows={6}
-                  placeholder={
-                    topic === "brand"
-                      ? "Which brand would you like to see on sale here?"
-                      : topic === "bug"
-                        ? "What went wrong, and where were you on the site?"
-                        : "Tell us anything."
-                  }
+                  placeholder={PLACEHOLDER}
                   className="mt-2 w-full resize-y rounded-2xl border border-black/15 p-4 text-sm outline-none transition focus:border-black"
                 />
 
@@ -235,22 +319,74 @@ export default function ContactUs() {
                   </span>
                 </div>
 
-                <div className="mt-4 flex justify-end gap-3">
+                {photos.length > 0 ? (
+                  <ul className="mt-3 flex flex-wrap gap-3">
+                    {photos.map((photo, index) => (
+                      <li key={photo.previewUrl} className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={photo.previewUrl}
+                          alt={`Attachment ${index + 1}`}
+                          className="size-20 rounded-xl border border-black/10 object-cover"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(index)}
+                          aria-label={`Remove attachment ${index + 1}`}
+                          className="absolute -right-2 -top-2 flex size-6 items-center justify-center rounded-full bg-black text-xs text-white transition hover:bg-black/80"
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*,.heic,.heif"
+                  multiple
+                  onChange={handleFiles}
+                  className="hidden"
+                />
+
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                   <button
                     type="button"
-                    onClick={close}
-                    className="rounded-full border border-black/15 px-4 py-2.5 text-sm transition hover:bg-black/5"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={isPreparing || photos.length >= MAX_PHOTOS}
+                    className="rounded-full border border-black/15 px-4 py-2.5 text-sm transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Cancel
+                    {isPreparing
+                      ? "Adding photo..."
+                      : photos.length > 0
+                        ? `Add photo (${photos.length}/${MAX_PHOTOS})`
+                        : "Add photo"}
                   </button>
 
-                  <button
-                    type="submit"
-                    disabled={isSending || message.trim().length === 0}
-                    className="rounded-full bg-black px-6 py-2.5 text-sm font-bold text-white transition hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {isSending ? "Sending..." : "Send"}
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={close}
+                      className="rounded-full border border-black/15 px-4 py-2.5 text-sm transition hover:bg-black/5"
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={
+                        isSending ||
+                        isPreparing ||
+                        message.trim().length === 0
+                      }
+                      className="rounded-full bg-black px-6 py-2.5 text-sm font-bold text-white transition hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {isSending ? "Sending..." : "Send"}
+                    </button>
+                  </div>
                 </div>
               </form>
             )}
