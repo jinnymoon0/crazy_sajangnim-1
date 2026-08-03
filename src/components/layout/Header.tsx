@@ -3,6 +3,7 @@
 import { Menu } from "lucide-react";
 
 import AccountMenu from "@/components/auth/AccountMenu";
+import ContactUs from "@/components/contact/ContactUs";
 import type { Gender, Market } from "@/types/product";
 
 interface HeaderProps {
@@ -39,6 +40,8 @@ export function Header({
         </h1>
 
         <div className="flex items-center justify-end gap-2 md:gap-3">
+          <ContactUs />
+
           <AccountMenu />
 
           <div className="flex rounded-full border border-black/15 bg-white p-1">
