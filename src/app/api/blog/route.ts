@@ -484,6 +484,7 @@ export async function POST(request: Request) {
         title: parsedFields.data.title,
         content: parsedFields.data.content,
         author_name: authorName,
+        user_id: sessionUser.id,
 
 
         image_urls: imageUrls,

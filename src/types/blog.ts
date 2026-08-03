@@ -3,6 +3,7 @@ export type BlogPost = {
   title: string;
   content: string;
   author_name: string;
+  user_id?: string | null;
   image_url: string;
   image_path: string;
   image_urls: string[];
@@ -14,6 +15,7 @@ export type BlogComment = {
   id: string;
   post_id: string;
   author_name: string;
+  user_id?: string | null;
   content: string;
   created_at: string;
 };

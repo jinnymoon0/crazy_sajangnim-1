@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getAuthState } from "@/lib/auth/session";
+import { isAuthor } from "@/lib/blog/authorship";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -15,6 +16,7 @@ type RouteContext = {
 
 type StoredPost = {
   id: string;
+  user_id: string | null;
   author_name: string | null;
   image_path: string | null;
   image_paths: string[] | null;
@@ -25,22 +27,23 @@ type StoredPost = {
  * rather than only in the page, because hiding the button leaves the
  * route open to anyone who calls it directly.
  *
- * Authorship is the stored author_name, which is the username at the
- * time of writing; usernames are unique, so it identifies one account.
+ * Authorship is the account id. The stored author_name is only the
+ * username at the time of writing, so it goes stale on a rename; it is
+ * the fallback for rows written before the id was recorded.
  */
 async function denyUnlessAuthor(
   post: StoredPost,
 ): Promise<NextResponse | null> {
   const state = await getAuthState();
 
-  if (!state.authenticated || !state.username) {
+  if (!state.authenticated || !state.userId || !state.username) {
     return NextResponse.json(
       { error: "Please sign in." },
       { status: 401 },
     );
   }
 
-  if (post.author_name !== state.username) {
+  if (!isAuthor(post, { id: state.userId, username: state.username })) {
     return NextResponse.json(
       { error: "Only the person who wrote this post can change it." },
       { status: 403 },
@@ -83,7 +86,7 @@ async function getStoredPost(id: string): Promise<StoredPost | null> {
 
   const { data, error } = await supabase
     .from("blog_posts")
-    .select("id, author_name, image_path, image_paths")
+    .select("id, user_id, author_name, image_path, image_paths")
     .eq("id", id)
     .maybeSingle();
 

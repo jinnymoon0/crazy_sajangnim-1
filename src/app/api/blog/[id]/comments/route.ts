@@ -173,6 +173,7 @@ export async function POST(request: Request, context: RouteContext) {
       .insert({
         post_id: id,
         author_name: sessionUser.username,
+        user_id: sessionUser.id,
         content: parsed.data.content,
       })
       .select("id, post_id, author_name, content, created_at")

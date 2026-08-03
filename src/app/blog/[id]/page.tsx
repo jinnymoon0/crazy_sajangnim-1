@@ -7,6 +7,8 @@ import BlogImageGallery from "@/components/blog/BlogImageGallery";
 import BlogLikeButton from "@/components/blog/BlogLikeButton";
 import BlogPostManagement from "@/components/blog/BlogPostManagement";
 import { requireOnboardedUser } from "@/lib/auth/session";
+import { displayName, isAuthor } from "@/lib/blog/authorship";
+import { getCurrentUsernames } from "@/lib/blog/current-names";
 import { getPostEngagement } from "@/lib/blog/engagement";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { BlogComment, BlogPost } from "@/types/blog";
@@ -24,6 +26,7 @@ type BlogPostRow = {
   title: string;
   content: string;
   author_name: string;
+  user_id: string | null;
   image_url: string | null;
   image_path: string | null;
   image_urls: string[] | null;
@@ -47,7 +50,7 @@ async function getBlogPost(id: string): Promise<BlogPost | null> {
   const { data, error } = await supabase
     .from("blog_posts")
     .select(
-      "id, title, content, author_name, image_url, image_path, image_urls, image_paths, created_at",
+      "id, title, content, author_name, user_id, image_url, image_path, image_urls, image_paths, created_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -98,7 +101,7 @@ async function getBlogComments(postId: string): Promise<CommentsResult> {
 
   const { data, error } = await supabase
     .from("blog_comments")
-    .select("id, post_id, author_name, content, created_at")
+    .select("id, post_id, author_name, user_id, content, created_at")
     .eq("post_id", postId)
     .order("created_at", { ascending: true })
     .limit(200);
@@ -132,6 +135,28 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { comments, ready: commentsReady } = await getBlogComments(post.id);
 
   const engagement = await getPostEngagement(post.id, user.id);
+
+  /*
+   * The names to show, taken from the accounts as they stand now rather
+   * than from what was stored when each was written.
+   */
+  const names = await getCurrentUsernames([
+    post.user_id ?? null,
+    ...comments.map((comment) => comment.user_id ?? null),
+  ]);
+
+  const postAuthor = displayName(
+    { user_id: post.user_id ?? null, author_name: post.author_name },
+    names,
+  );
+
+  const namedComments = comments.map((comment) => ({
+    ...comment,
+    author_name: displayName(
+      { user_id: comment.user_id ?? null, author_name: comment.author_name },
+      names,
+    ),
+  }));
 
   return (
     <main className="min-h-screen bg-neutral-100 px-4 py-8 sm:px-6 sm:py-12">
@@ -179,7 +204,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             <div className="p-6 sm:p-8 lg:sticky lg:top-6">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-neutral-500">
                 <span className="font-semibold text-neutral-700">
-                  {post.author_name}
+                  {postAuthor}
                 </span>
 
                 <span aria-hidden="true">•</span>
@@ -226,7 +251,10 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 route checks this too — hiding the button would leave it
                 open to anyone calling the API directly.
               */}
-              {post.author_name === user.username ? (
+              {isAuthor(
+                { user_id: post.user_id ?? null, author_name: post.author_name },
+                user,
+              ) ? (
                 <BlogPostManagement
                   postId={post.id}
                   initialTitle={post.title}
@@ -239,7 +267,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
         <BlogComments
           postId={post.id}
-          initialComments={comments}
+          initialComments={namedComments}
           commentsReady={commentsReady}
           username={user.username}
         />
