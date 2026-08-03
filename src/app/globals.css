@@ -30,9 +30,17 @@ button {
   cursor: pointer;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/*
+ * Layered so utility classes can override it. Unlayered rules beat
+ * every layer whatever their specificity, so an unlayered anchor colour
+ * silently won against text-white and left white-on-dark buttons
+ * rendering dark text on a dark background.
+ */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 .font-diploma {
