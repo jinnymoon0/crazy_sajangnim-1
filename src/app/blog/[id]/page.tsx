@@ -4,8 +4,10 @@ import { notFound } from "next/navigation";
 import AccountMenu from "@/components/auth/AccountMenu";
 import BlogComments from "@/components/blog/BlogComments";
 import BlogImageGallery from "@/components/blog/BlogImageGallery";
+import BlogLikeButton from "@/components/blog/BlogLikeButton";
 import BlogPostManagement from "@/components/blog/BlogPostManagement";
 import { requireOnboardedUser } from "@/lib/auth/session";
+import { getPostEngagement } from "@/lib/blog/engagement";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { BlogComment, BlogPost } from "@/types/blog";
 
@@ -129,6 +131,8 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
   const { comments, ready: commentsReady } = await getBlogComments(post.id);
 
+  const engagement = await getPostEngagement(post.id, user.id);
+
   return (
     <main className="min-h-screen bg-neutral-100 px-4 py-8 sm:px-6 sm:py-12">
       <div className="mx-auto max-w-6xl">
@@ -199,9 +203,22 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 </p>
               </div>
 
-              <div className="mt-8 rounded-2xl bg-neutral-100 px-4 py-3 text-sm text-neutral-600">
-                {post.image_urls.length}{" "}
-                {post.image_urls.length === 1 ? "photo" : "photos"}
+              <div className="mt-8 flex flex-wrap items-center gap-4">
+                <BlogLikeButton
+                  postId={post.id}
+                  initialLiked={engagement.likedByViewer}
+                  initialCount={engagement.likes}
+                />
+
+                <span className="rounded-2xl bg-neutral-100 px-4 py-3 text-sm text-neutral-600">
+                  {engagement.comments}{" "}
+                  {engagement.comments === 1 ? "comment" : "comments"}
+                </span>
+
+                <span className="rounded-2xl bg-neutral-100 px-4 py-3 text-sm text-neutral-600">
+                  {post.image_urls.length}{" "}
+                  {post.image_urls.length === 1 ? "photo" : "photos"}
+                </span>
               </div>
 
               {/*

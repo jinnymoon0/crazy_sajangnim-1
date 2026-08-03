@@ -4,6 +4,7 @@ import type { BlogPost } from "@/types/blog";
 
 type BlogFeedProps = {
   posts: BlogPost[];
+  engagement?: Record<string, { likes: number; comments: number }>;
 };
 
 function formatPostDate(dateValue: string): string {
@@ -102,7 +103,7 @@ function PostImages({
   );
 }
 
-export default function BlogFeed({ posts }: BlogFeedProps) {
+export default function BlogFeed({ posts, engagement }: BlogFeedProps) {
   if (posts.length === 0) {
     return (
       <section className="rounded-3xl border border-dashed border-neutral-300 bg-white px-6 py-16 text-center">
@@ -144,6 +145,8 @@ export default function BlogFeed({ posts }: BlogFeedProps) {
                 ? [post.image_url]
                 : [];
 
+          const counts = engagement?.[post.id] ?? { likes: 0, comments: 0 };
+
           return (
             <Link
               key={post.id}
@@ -175,13 +178,27 @@ export default function BlogFeed({ posts }: BlogFeedProps) {
                     {post.content}
                   </p>
 
-                  <div className="mt-4 flex items-center justify-between text-xs font-semibold text-neutral-500">
-                    <span>
-                      {imageUrls.length}{" "}
-                      {imageUrls.length === 1 ? "photo" : "photos"}
+                  <div className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold text-neutral-500">
+                    <span className="flex items-center gap-3">
+                      <span
+                        title={`${counts.likes} ${counts.likes === 1 ? "like" : "likes"}`}
+                      >
+                        <span aria-hidden="true">♥</span> {counts.likes}
+                      </span>
+
+                      <span
+                        title={`${counts.comments} ${counts.comments === 1 ? "comment" : "comments"}`}
+                      >
+                        <span aria-hidden="true">💬</span> {counts.comments}
+                      </span>
+
+                      <span className="text-neutral-400">
+                        {imageUrls.length}{" "}
+                        {imageUrls.length === 1 ? "photo" : "photos"}
+                      </span>
                     </span>
 
-                    <span className="text-neutral-950">
+                    <span className="shrink-0 text-neutral-950">
                       View post →
                     </span>
                   </div>
