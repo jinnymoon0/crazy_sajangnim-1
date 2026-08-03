@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -6,10 +8,22 @@ import {
   isSameOriginRequest,
 } from "@/lib/auth/api-helpers";
 import { getAuthState } from "@/lib/auth/session";
+import {
+  getStorageContentType,
+  getStorageExtension,
+  isSupportedImage,
+} from "@/lib/images/upload-fields";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const BUCKET = "contact-images";
+
+// The browser shrinks each photo to about 800 KB, so four stay well
+// inside the ~4.5 MB a serverless request body may carry.
+const MAX_IMAGE_COUNT = 4;
+const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
 
 const contactSchema = z.object({
   topic: z.enum(["brand", "bug", "other"]),
@@ -36,6 +50,8 @@ function getClientIp(request: Request): string | null {
 }
 
 export async function POST(request: Request) {
+  const uploadedPaths: string[] = [];
+
   try {
     if (!isSameOriginRequest(request)) {
       return NextResponse.json(
@@ -57,8 +73,19 @@ export async function POST(request: Request) {
       );
     }
 
-    const body: unknown = await request.json().catch(() => null);
-    const parsed = contactSchema.safeParse(body);
+    const form = await request.formData().catch(() => null);
+
+    if (!form) {
+      return NextResponse.json(
+        { error: "Please check the message." },
+        { status: 400 },
+      );
+    }
+
+    const parsed = contactSchema.safeParse({
+      topic: form.get("topic"),
+      message: form.get("message"),
+    });
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -70,17 +97,92 @@ export async function POST(request: Request) {
       );
     }
 
+    const images = form
+      .getAll("images")
+      .filter((value): value is File => value instanceof File && value.size > 0);
+
+    if (images.length > MAX_IMAGE_COUNT) {
+      return NextResponse.json(
+        { error: `Please attach at most ${MAX_IMAGE_COUNT} photos.` },
+        { status: 400 },
+      );
+    }
+
+    for (const image of images) {
+      if (!isSupportedImage(image)) {
+        return NextResponse.json(
+          { error: `${image.name} is not an image we can accept.` },
+          { status: 400 },
+        );
+      }
+
+      if (image.size > MAX_IMAGE_SIZE) {
+        return NextResponse.json(
+          { error: `${image.name} is too large.` },
+          { status: 400 },
+        );
+      }
+    }
+
     const supabase = getSupabaseAdmin();
+
+    /*
+     * Into a private bucket: a screenshot of someone's own screen can
+     * carry their email or orders, so the admin views these through
+     * short-lived signed links rather than permanent public addresses.
+     */
+    const folder = crypto.randomUUID();
+
+    for (const [index, image] of images.entries()) {
+      const path = [
+        new Date().getUTCFullYear(),
+        folder,
+        `${index + 1}-${crypto.randomUUID()}.${getStorageExtension(image)}`,
+      ].join("/");
+
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, Buffer.from(await image.arrayBuffer()), {
+          contentType: getStorageContentType(image),
+          cacheControl: "31536000",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error("Contact photo upload failed:", {
+          name: uploadError.name,
+          message: uploadError.message,
+          path,
+        });
+
+        if (uploadedPaths.length > 0) {
+          await supabase.storage.from(BUCKET).remove(uploadedPaths);
+        }
+
+        return NextResponse.json(
+          { error: "The photo could not be attached. Please try again." },
+          { status: 500 },
+        );
+      }
+
+      uploadedPaths.push(path);
+    }
 
     const { error } = await supabase.from("contact_messages").insert({
       user_id: state.userId,
       topic: parsed.data.topic,
       message: parsed.data.message,
+      image_paths: uploadedPaths.length > 0 ? uploadedPaths : null,
       ip_address: getClientIp(request),
       user_agent: request.headers.get("user-agent")?.slice(0, 500) ?? null,
     });
 
     if (error) {
+      // Nothing references the photos now, so do not leave them behind.
+      if (uploadedPaths.length > 0) {
+        await supabase.storage.from(BUCKET).remove(uploadedPaths);
+      }
+
       if (isMissingTableError(error)) {
         console.error(
           "The contact_messages table does not exist. Run supabase/contact.sql.",
@@ -88,6 +190,22 @@ export async function POST(request: Request) {
 
         return NextResponse.json(
           { error: "The contact box is not ready yet. Please try later." },
+          { status: 503 },
+        );
+      }
+
+      /*
+       * 42703 is the column missing: the message could still be stored
+       * without its photos, but silently dropping them would be worse
+       * than saying so.
+       */
+      if (error.code === "42703" || error.code === "PGRST204") {
+        console.error(
+          "contact_messages.image_paths is missing. Run supabase/contact-images.sql.",
+        );
+
+        return NextResponse.json(
+          { error: "Photos are not ready yet. Please send without one." },
           { status: 503 },
         );
       }
@@ -106,6 +224,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ sent: true }, { status: 201 });
   } catch (error) {
     console.error("Contact message error:", error);
+
+    if (uploadedPaths.length > 0) {
+      await getSupabaseAdmin()
+        .storage.from(BUCKET)
+        .remove(uploadedPaths)
+        .catch(() => undefined);
+    }
 
     return NextResponse.json(
       { error: "An unexpected error occurred." },
