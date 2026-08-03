@@ -16,6 +16,8 @@ export type BlogComment = {
   post_id: string;
   author_name: string;
   user_id?: string | null;
+  /** The comment this answers, for 대댓글. Null for a top-level comment. */
+  parent_id?: string | null;
   content: string;
   created_at: string;
 };

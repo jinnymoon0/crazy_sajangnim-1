@@ -42,6 +42,8 @@ export default function BlogComments({
   const [content, setContent] = useState("");
   const [website, setWebsite] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyContent, setReplyContent] = useState("");
   const [status, setStatus] = useState<SubmissionStatus>({
     type: "idle",
     message: "",
@@ -81,6 +83,54 @@ export default function BlogComments({
     return () => window.clearTimeout(timer);
   }, [commentsReady, refreshComments]);
 
+  async function postComment(
+    text: string,
+    parentId: string | null,
+  ): Promise<boolean> {
+    const response = await fetch(`/api/blog/${postId}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: text, website, parentId }),
+    });
+
+    const result = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(result.error ?? "Failed to post the comment.");
+    }
+
+    return true;
+  }
+
+  async function handleReply(parentId: string) {
+    if (!replyContent.trim()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setStatus({ type: "idle", message: "" });
+
+    try {
+      await postComment(replyContent, parentId);
+
+      setReplyContent("");
+      setReplyingTo(null);
+      setStatus({ type: "success", message: "Your reply has been posted." });
+
+      await refreshComments();
+    } catch (error) {
+      setStatus({
+        type: "error",
+        message:
+          error instanceof Error ? error.message : "Failed to post the reply.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -97,24 +147,7 @@ export default function BlogComments({
     setStatus({ type: "idle", message: "" });
 
     try {
-      const response = await fetch(`/api/blog/${postId}/comments`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          content,
-          website,
-        }),
-      });
-
-      const result = (await response.json().catch(() => ({}))) as {
-        error?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(result.error ?? "Failed to post the comment.");
-      }
+      await postComment(content, null);
 
       setContent("");
       setStatus({
@@ -136,6 +169,58 @@ export default function BlogComments({
     }
   }
 
+  const topLevel = comments.filter((comment) => !comment.parent_id);
+
+  const repliesByParent = new Map<string, BlogComment[]>();
+
+  for (const comment of comments) {
+    if (!comment.parent_id) {
+      continue;
+    }
+
+    const thread = repliesByParent.get(comment.parent_id) ?? [];
+
+    thread.push(comment);
+    repliesByParent.set(comment.parent_id, thread);
+  }
+
+  function renderReplyBox(parentId: string) {
+    return (
+      <div className="mt-3">
+        <textarea
+          value={replyContent}
+          onChange={(event) => setReplyContent(event.target.value)}
+          rows={2}
+          maxLength={1000}
+          placeholder="답글을 남겨보세요"
+          className="w-full resize-y rounded-xl border border-black/15 bg-white p-3 text-sm outline-none transition focus:border-neutral-950"
+        />
+
+        <div className="mt-2 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setReplyingTo(null);
+              setReplyContent("");
+            }}
+            className="rounded-full border border-black/15 px-3 py-1.5 text-xs font-semibold transition hover:bg-black/5"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void handleReply(parentId)}
+            disabled={isSubmitting || replyContent.trim().length === 0}
+            className="rounded-full bg-neutral-950 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isSubmitting ? "Posting..." : "Reply"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <section
       aria-label="Comments"
@@ -152,29 +237,78 @@ export default function BlogComments({
 
       {comments.length > 0 ? (
         <ul className="mt-6 space-y-5">
-          {comments.map((comment) => (
-            <li
-              key={comment.id}
-              className="rounded-2xl bg-neutral-100 px-5 py-4"
-            >
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                <span className="font-semibold text-neutral-800">
-                  {comment.author_name}
-                </span>
+          {topLevel.map((comment) => {
+            const replies = repliesByParent.get(comment.id) ?? [];
 
-                <time
-                  dateTime={comment.created_at}
-                  className="text-xs text-neutral-500"
+            return (
+              <li
+                key={comment.id}
+                className="rounded-2xl bg-neutral-100 px-5 py-4"
+              >
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <span className="font-semibold text-neutral-800">
+                    {comment.author_name}
+                  </span>
+
+                  <time
+                    dateTime={comment.created_at}
+                    className="text-xs text-neutral-500"
+                  >
+                    {formatCommentDate(comment.created_at)}
+                  </time>
+                </div>
+
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-700">
+                  {comment.content}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplyingTo(replyingTo === comment.id ? null : comment.id);
+                    setReplyContent("");
+                  }}
+                  className="mt-2 text-xs font-semibold text-neutral-500 transition hover:text-neutral-950"
                 >
-                  {formatCommentDate(comment.created_at)}
-                </time>
-              </div>
+                  {replyingTo === comment.id ? "Cancel" : "답글"}
+                </button>
 
-              <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-700">
-                {comment.content}
-              </p>
-            </li>
-          ))}
+                {replies.length > 0 ? (
+                  <ul className="mt-3 space-y-3 border-l-2 border-neutral-300 pl-4">
+                    {replies.map((reply) => (
+                      <li key={reply.id}>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                          <span
+                            aria-hidden="true"
+                            className="text-neutral-400"
+                          >
+                            ↳
+                          </span>
+
+                          <span className="font-semibold text-neutral-800">
+                            {reply.author_name}
+                          </span>
+
+                          <time
+                            dateTime={reply.created_at}
+                            className="text-xs text-neutral-500"
+                          >
+                            {formatCommentDate(reply.created_at)}
+                          </time>
+                        </div>
+
+                        <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-700">
+                          {reply.content}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
+                {replyingTo === comment.id ? renderReplyBox(comment.id) : null}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="mt-6 text-sm text-neutral-500">
