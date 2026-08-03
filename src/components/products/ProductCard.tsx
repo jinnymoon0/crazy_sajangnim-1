@@ -12,11 +12,33 @@ import type { Product } from "@/types/product";
 
 interface ProductCardProps {
   product: Product;
+  isSignedIn: boolean;
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, isSignedIn }: ProductCardProps) {
   const router = useRouter();
   const [imageFailed, setImageFailed] = useState(false);
+
+  /*
+   * Browsing is open; following a listing through to the shop that sells
+   * it asks for an account. Signing in returns them to the same page of
+   * results, where the card is one more click away.
+   *
+   * The retailer's address stays on the anchor so the card is still a
+   * real link — copyable, openable in a new tab by anyone who has an
+   * account, and readable by a crawler.
+   */
+  function handleOpen(event: MouseEvent<HTMLAnchorElement>) {
+    if (isSignedIn) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const here = `${window.location.pathname}${window.location.search}`;
+
+    router.push(`/login?callbackUrl=${encodeURIComponent(here)}`);
+  }
 
   function handleShare(event: MouseEvent<HTMLButtonElement>) {
     // The card itself is a link to the retailer — keep the click local.
@@ -52,6 +74,7 @@ export function ProductCard({ product }: ProductCardProps) {
   return (
     <a
       href={product.sourceUrl}
+      onClick={handleOpen}
       target="_blank"
       rel="noopener noreferrer sponsored"
       className="group block"

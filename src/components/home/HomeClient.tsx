@@ -13,7 +13,11 @@ import type { Gender, Market, ProductSort } from "@/types/product";
 
 type SelectableGender = Exclude<Gender, "UNISEX">;
 
-export default function HomeClient() {
+export default function HomeClient({
+  isSignedIn,
+}: {
+  isSignedIn: boolean;
+}) {
   const [market, setMarket] = useState<Market>("US");
   const [gender, setGender] = useState<SelectableGender>("MEN");
 
@@ -195,7 +199,7 @@ export default function HomeClient() {
             ))}
           </div>
         ) : (
-          <ProductGrid products={products} />
+          <ProductGrid products={products} isSignedIn={isSignedIn} />
         )}
       </section>
     </main>
