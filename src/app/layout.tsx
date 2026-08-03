@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Grenze_Gotisch } from "next/font/google";
+import { UnifrakturMaguntia } from "next/font/google";
 
 import "./globals.css";
 
@@ -7,12 +7,13 @@ import "./globals.css";
  * The wordmark's blackletter face. Self-hosted by next/font, so it is
  * served from our own origin and does not shift once loaded.
  *
- * Grenze Gotisch rather than a traditional fraktur: in those, capital S
- * and G are all but the same glyph, and the name read as "Crazy
- * Gajangnim".
+ * A traditional Textura, chosen for the look. Its capital S is the
+ * closed, curled form that reads like a G to a modern eye — that is the
+ * style, not a mistake, and swapping it out costs the ornate letterforms
+ * this is here for.
  */
-const blackletter = Grenze_Gotisch({
-  weight: "600",
+const blackletter = UnifrakturMaguntia({
+  weight: "400",
   subsets: ["latin"],
   display: "swap",
   variable: "--font-blackletter",
