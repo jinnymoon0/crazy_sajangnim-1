@@ -47,6 +47,6 @@ button {
   /* The face is loaded at one weight; asking for another would have the
      browser smear a fake bold over it. */
   font-family: var(--font-blackletter), "Times New Roman", Georgia, serif;
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.02em;
 }
