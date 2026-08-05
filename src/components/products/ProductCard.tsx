@@ -1,6 +1,7 @@
 "use client";
 
 import { type MouseEvent, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { formatPrice } from "@/lib/utils";
@@ -18,6 +19,7 @@ interface ProductCardProps {
 export function ProductCard({ product, isSignedIn }: ProductCardProps) {
   const router = useRouter();
   const [imageFailed, setImageFailed] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
   /*
    * Browsing is open; following a listing through to the shop that sells
@@ -40,6 +42,14 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
     router.push(`/login?callbackUrl=${encodeURIComponent(here)}`);
   }
 
+  /*
+   * Worked out at render, so the link is real markup a tap can follow
+   * straight away rather than something JavaScript decides afterwards.
+   */
+  const shareHref = isSignedIn
+    ? "/blog"
+    : `/login?callbackUrl=${encodeURIComponent("/blog")}`;
+
   function handleShare() {
 
     const draft: BlogShareDraft = {
@@ -60,13 +70,8 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
       // Storage unavailable — the form simply starts empty.
     }
 
-    /*
-     * Straight to the blog when they can post; otherwise sign in first
-     * and come back to it. The draft outlives the detour.
-     */
-    router.push(
-      isSignedIn ? "/blog" : `/login?callbackUrl=${encodeURIComponent("/blog")}`,
-    );
+    // The link itself does the navigating; this only keeps the draft.
+    setIsSharing(true);
   }
 
   const hasVerifiedDiscount =
@@ -155,13 +160,17 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
         Signed out it goes to the login page and comes back here; the
         draft is kept either way, so the form is filled in on arrival.
       */}
-      <button
-        type="button"
+      <Link
+        href={shareHref}
+        prefetch
         onClick={handleShare}
-        className="mt-3 inline-flex min-h-11 w-full items-center justify-center border border-black/15 px-3 text-xs font-semibold uppercase tracking-[0.08em] transition hover:bg-black hover:text-white"
+        aria-disabled={isSharing}
+        className={`mt-3 inline-flex min-h-11 w-full touch-manipulation items-center justify-center border border-black/15 px-3 text-xs font-semibold uppercase tracking-[0.08em] transition hover:bg-black hover:text-white ${
+          isSharing ? "bg-black text-white" : ""
+        }`}
       >
-        Share on blog
-      </button>
+        {isSharing ? "Opening blog..." : "Share on blog"}
+      </Link>
     </article>
   );
 }
