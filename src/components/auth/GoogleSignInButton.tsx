@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 
-export default function GoogleSignInButton() {
+export default function GoogleSignInButton({
+  callbackUrl,
+}: {
+  callbackUrl?: string | null;
+}) {
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -13,7 +17,7 @@ export default function GoogleSignInButton() {
 
     try {
       await signIn("google", {
-        redirectTo: "/",
+        redirectTo: callbackUrl ?? "/",
       });
     } catch (signInError) {
       console.error("Google sign-in could not start:", signInError);

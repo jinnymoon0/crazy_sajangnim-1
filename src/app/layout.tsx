@@ -23,6 +23,7 @@ const blackletter = localFont({
 });
 
 import LoginMetadataRecorder from "@/components/auth/LoginMetadataRecorder";
+import VisitRecorder from "@/components/VisitRecorder";
 import UsernameGate from "@/components/auth/UsernameGate";
 
 export const metadata: Metadata = {
@@ -39,6 +40,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={blackletter.variable}>
       <body>
+        <VisitRecorder />
         <LoginMetadataRecorder />
         <UsernameGate />
         {children}

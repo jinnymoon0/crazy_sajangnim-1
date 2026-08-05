@@ -1,15 +1,18 @@
 import HomeClient from "@/components/home/HomeClient";
-import { requireOnboardedUser } from "@/lib/auth/session";
+import { getAuthState } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 /*
- * The shop requires a signed-in account with a chosen username; the
- * redirect happens server-side so it works without any client
- * JavaScript.
+ * The shop is open to anyone. Signing in is only asked for at the blog,
+ * and to follow a product through to the retailer.
+ *
+ * Whether there is a session is read here rather than in the cards, so
+ * the answer arrives with the page — asking from the browser would show
+ * every product as locked for a moment first.
  */
 export default async function HomePage() {
-  await requireOnboardedUser();
+  const state = await getAuthState();
 
-  return <HomeClient />;
+  return <HomeClient isSignedIn={state.authenticated} />;
 }

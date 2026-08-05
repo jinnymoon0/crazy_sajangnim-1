@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ProductGrid } from "@/components/products/ProductGrid";
+import { recordView } from "@/components/VisitRecorder";
 import { useProducts } from "@/hooks/use-products";
 import type { BrandSlug } from "@/constants/brands";
 import type { CategorySlug } from "@/constants/categories";
@@ -13,7 +14,11 @@ import type { Gender, Market, ProductSort } from "@/types/product";
 
 type SelectableGender = Exclude<Gender, "UNISEX">;
 
-export default function HomeClient() {
+export default function HomeClient({
+  isSignedIn,
+}: {
+  isSignedIn: boolean;
+}) {
   const [market, setMarket] = useState<Market>("US");
   const [gender, setGender] = useState<SelectableGender>("MEN");
 
@@ -24,6 +29,23 @@ export default function HomeClient() {
   const [selectedCategory, setSelectedCategory] = useState<CategorySlug>("all");
 
   const [sort, setSort] = useState<ProductSort>("discount-desc");
+
+  /*
+   * Changing storefront is this shop's equivalent of turning to another
+   * page, so report it. The first render is already reported by the
+   * recorder in the layout; this picks up the switches after it.
+   */
+  const reportedFirst = useRef(false);
+
+  useEffect(() => {
+    if (!reportedFirst.current) {
+      reportedFirst.current = true;
+
+      return;
+    }
+
+    recordView({ market, gender });
+  }, [market, gender]);
 
   const { data, error, isLoading, isValidating, mutate } = useProducts(
     market,
@@ -195,7 +217,7 @@ export default function HomeClient() {
             ))}
           </div>
         ) : (
-          <ProductGrid products={products} />
+          <ProductGrid products={products} isSignedIn={isSignedIn} />
         )}
       </section>
     </main>

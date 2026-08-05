@@ -3,9 +3,10 @@ import { ProductCard } from "./ProductCard";
 
 interface ProductGridProps {
   products: Product[];
+  isSignedIn: boolean;
 }
 
-export function ProductGrid({ products }: ProductGridProps) {
+export function ProductGrid({ products, isSignedIn }: ProductGridProps) {
   if (products.length === 0) {
     return (
       <div className="flex min-h-80 items-center justify-center border border-dashed border-black/20">
@@ -26,6 +27,7 @@ export function ProductGrid({ products }: ProductGridProps) {
     <div className="grid grid-cols-2 gap-x-4 gap-y-10 md:grid-cols-3 xl:grid-cols-4">
       {products.map((product, index) => (
         <ProductCard
+          isSignedIn={isSignedIn}
           key={`${product.id}-${index}`}
           product={product}
         />
