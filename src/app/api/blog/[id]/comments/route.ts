@@ -23,7 +23,7 @@ const commentSchema = z.object({
     .min(1, "Please enter a comment.")
     .max(1000, "The comment must be 1,000 characters or fewer."),
 
-  // The comment being replied to, for 대댓글.
+  // The comment being replied to.
   parentId: z.string().uuid().nullish(),
 });
 
@@ -44,6 +44,69 @@ function isSameOriginRequest(request: Request): boolean {
 function isMissingTableError(error: { code?: string }): boolean {
   // 42P01: raw Postgres missing relation; PGRST205: PostgREST schema cache.
   return error.code === "42P01" || error.code === "PGRST205";
+}
+
+/*
+ * How far a thread may indent before replies stop nesting deeper.
+ */
+const MAX_THREAD_DEPTH = 6;
+
+/*
+ * The comment a new reply should hang off: the one being answered, or —
+ * if answering it would indent past the limit — its nearest ancestor
+ * that still fits.
+ *
+ * Read as one query and walked in memory rather than a query per level,
+ * so depth costs nothing beyond the comments already being loaded.
+ */
+async function clampToMaxDepth(
+  parentId: string,
+  postId: string,
+): Promise<string> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("blog_comments")
+    .select("id, parent_id")
+    .eq("post_id", postId)
+    .limit(MAX_COMMENTS);
+
+  if (error || !data) {
+    return parentId;
+  }
+
+  const parentOf = new Map<string, string | null>(
+    data.map((row) => [row.id as string, (row.parent_id as string) ?? null]),
+  );
+
+  /*
+   * Walk from the comment being answered up to the root, collecting the
+   * chain. Bounded by the number of comments read, so a parent_id cycle
+   * — which the schema should never allow — cannot spin here.
+   */
+  const chain: string[] = [];
+  const seen = new Set<string>();
+
+  let cursor: string | null = parentId;
+
+  while (cursor && !seen.has(cursor)) {
+    seen.add(cursor);
+    chain.push(cursor);
+    cursor = parentOf.get(cursor) ?? null;
+  }
+
+  // chain[0] is the parent, chain[chain.length - 1] the root.
+  const depthOfNewComment = chain.length;
+
+  if (depthOfNewComment <= MAX_THREAD_DEPTH) {
+    return parentId;
+  }
+
+  /*
+   * Too deep: step back down the chain to the ancestor sitting at the
+   * last depth a reply is allowed to occupy.
+   */
+  return chain[depthOfNewComment - MAX_THREAD_DEPTH] ?? parentId;
 }
 
 export async function GET(request: Request, context: RouteContext) {
@@ -172,9 +235,13 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     /*
-     * Replies sit one level deep. Someone answering a reply is answering
-     * the thread, so walk up to its root rather than nesting further —
-     * a thread that keeps indenting is unreadable on a phone.
+     * A reply hangs off whatever it answers, so answering a reply nests
+     * one level deeper rather than rejoining the top of the thread.
+     *
+     * Only up to MAX_THREAD_DEPTH, though. Indentation cannot keep
+     * growing on a phone screen, so past that depth a reply joins its
+     * deepest ancestor still within the limit — the conversation carries
+     * on, it just stops moving right.
      */
     let parentId: string | null = null;
 
@@ -202,7 +269,7 @@ export async function POST(request: Request, context: RouteContext) {
         );
       }
 
-      parentId = parent.parent_id ?? parent.id;
+      parentId = await clampToMaxDepth(parent.id, id);
     }
 
     const { data: comment, error: insertError } = await supabase

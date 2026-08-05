@@ -1,10 +1,9 @@
--- 대댓글: replies to a comment.
+-- Replies to a comment.
 --
--- One level deep. A reply always hangs off a top-level comment, so a
--- reply to a reply joins the same thread rather than starting a deeper
--- one — the API enforces that by walking up to the root before saving.
--- Threads that nest without limit are hard to read on a phone and
--- harder to keep tidy.
+-- A reply hangs off whatever it answers, so answering a reply nests one
+-- level deeper and threads read as conversations. The API caps how far
+-- that indents; past the limit a reply joins its deepest ancestor still
+-- within it, because indentation cannot keep growing on a phone.
 --
 -- Deleting a comment takes its replies with it; a reply with nothing to
 -- answer reads as a non sequitur.

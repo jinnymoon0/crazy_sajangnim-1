@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getAuthState } from "@/lib/auth/session";
-import { isAuthor } from "@/lib/blog/authorship";
+import { canModerate } from "@/lib/blog/moderation";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -23,15 +23,15 @@ type StoredPost = {
 };
 
 /*
- * A post may only be changed by the person who wrote it. Checked here
- * rather than only in the page, because hiding the button leaves the
- * route open to anyone who calls it directly.
+ * A post may only be changed by the person who wrote it, or by the super
+ * admin. Checked here rather than only in the page, because hiding the
+ * button leaves the route open to anyone who calls it directly.
  *
  * Authorship is the account id. The stored author_name is only the
  * username at the time of writing, so it goes stale on a rename; it is
  * the fallback for rows written before the id was recorded.
  */
-async function denyUnlessAuthor(
+async function denyUnlessAllowed(
   post: StoredPost,
 ): Promise<NextResponse | null> {
   const state = await getAuthState();
@@ -43,7 +43,12 @@ async function denyUnlessAuthor(
     );
   }
 
-  if (!isAuthor(post, { id: state.userId, username: state.username })) {
+  const allowed = await canModerate(post, {
+    id: state.userId,
+    username: state.username,
+  });
+
+  if (!allowed) {
     return NextResponse.json(
       { error: "Only the person who wrote this post can change it." },
       { status: 403 },
@@ -140,7 +145,7 @@ export async function PATCH(
       );
     }
 
-    const denied = await denyUnlessAuthor(existingPost);
+    const denied = await denyUnlessAllowed(existingPost);
 
     if (denied) {
       return denied;
@@ -210,7 +215,7 @@ export async function DELETE(
       );
     }
 
-    const denied = await denyUnlessAuthor(post);
+    const denied = await denyUnlessAllowed(post);
 
     if (denied) {
       return denied;
