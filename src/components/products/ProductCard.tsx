@@ -40,10 +40,7 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
     router.push(`/login?callbackUrl=${encodeURIComponent(here)}`);
   }
 
-  function handleShare(event: MouseEvent<HTMLButtonElement>) {
-    // The card itself is a link to the retailer — keep the click local.
-    event.preventDefault();
-    event.stopPropagation();
+  function handleShare() {
 
     const draft: BlogShareDraft = {
       brandName: product.brandName,
@@ -63,7 +60,13 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
       // Storage unavailable — the form simply starts empty.
     }
 
-    router.push("/blog");
+    /*
+     * Straight to the blog when they can post; otherwise sign in first
+     * and come back to it. The draft outlives the detour.
+     */
+    router.push(
+      isSignedIn ? "/blog" : `/login?callbackUrl=${encodeURIComponent("/blog")}`,
+    );
   }
 
   const hasVerifiedDiscount =
@@ -72,14 +75,20 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
     product.discountPercentage !== null;
 
   return (
-    <a
-      href={product.sourceUrl}
-      onClick={handleOpen}
-      target="_blank"
-      rel="noopener noreferrer sponsored"
-      className="group block"
-    >
-      <article>
+    /*
+     * The link and the share button are siblings, not nested. A button
+     * inside an anchor is invalid HTML, and a phone resolves the tap
+     * its own way — iOS follows the anchor to the retailer whatever the
+     * button's handler says, so sharing never reached the blog.
+     */
+    <article className="group">
+      <a
+        href={product.sourceUrl}
+        onClick={handleOpen}
+        target="_blank"
+        rel="noopener noreferrer sponsored"
+        className="block"
+      >
         <div className="relative aspect-[4/5] overflow-hidden bg-[#e7e3da]">
           {!imageFailed ? (
             <img
@@ -138,16 +147,21 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
           <p className="mt-2 text-[11px] text-black/45">
             Verified from the retailer during the latest catalog refresh
           </p>
-
-          <button
-            type="button"
-            onClick={handleShare}
-            className="mt-3 inline-flex min-h-9 items-center justify-center border border-black/15 px-3 text-xs font-semibold uppercase tracking-[0.08em] transition hover:bg-black hover:text-white"
-          >
-            Share on blog
-          </button>
         </div>
-      </article>
-    </a>
+      </a>
+
+      {/*
+        Outside the anchor, so a tap on a phone can only mean one thing.
+        Signed out it goes to the login page and comes back here; the
+        draft is kept either way, so the form is filled in on arrival.
+      */}
+      <button
+        type="button"
+        onClick={handleShare}
+        className="mt-3 inline-flex min-h-11 w-full items-center justify-center border border-black/15 px-3 text-xs font-semibold uppercase tracking-[0.08em] transition hover:bg-black hover:text-white"
+      >
+        Share on blog
+      </button>
+    </article>
   );
 }
