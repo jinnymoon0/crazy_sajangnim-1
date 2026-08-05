@@ -42,7 +42,20 @@ export const LIMITS = {
 
 const memory = new Map<string, { count: number; expiresAt: number }>();
 
-let tableMissing = false;
+/*
+ * When to try the database again after finding it had nothing to
+ * count with.
+ *
+ * Not a permanent latch. Instances are long-lived and a migration is
+ * run while they are warm, so a one-way switch meant the counters kept
+ * falling back to memory long after the table existed — and the only
+ * cure was a redeploy, which is a silly thing to need after running
+ * some SQL. Retrying occasionally costs one failed call every few
+ * minutes and lets it heal itself.
+ */
+const RETRY_AFTER_MS = 5 * 60_000;
+
+let unavailableUntil = 0;
 
 function checkInMemory(key: string, rule: RateLimit): RateLimitResult {
   const now = Date.now();
@@ -103,7 +116,7 @@ export async function checkRateLimit(
 ): Promise<RateLimitResult> {
   const key = `${action}:${caller}`;
 
-  if (tableMissing) {
+  if (Date.now() < unavailableUntil) {
     return checkInMemory(key, rule);
   }
 
@@ -122,13 +135,13 @@ export async function checkRateLimit(
         error.code === "PGRST202" ||
         error.code === "PGRST205"
       ) {
-        if (!tableMissing) {
+        if (unavailableUntil === 0) {
           console.error(
             "Rate limiting is counting in memory only. Run supabase/rate-limits.sql to count across instances.",
           );
         }
 
-        tableMissing = true;
+        unavailableUntil = Date.now() + RETRY_AFTER_MS;
 
         return checkInMemory(key, rule);
       }

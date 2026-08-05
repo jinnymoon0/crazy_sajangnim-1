@@ -174,3 +174,44 @@ describe("who gets counted", () => {
     );
   });
 });
+
+describe("recovering after the migration is run", () => {
+  it("tries the database again rather than counting in memory forever", async () => {
+    /*
+     * Instances stay warm across a migration. A one-way latch meant the
+     * counters kept falling back to memory long after the table
+     * existed, and the only cure was a redeploy — a silly thing to need
+     * after running some SQL.
+     */
+    vi.useFakeTimers();
+
+    try {
+      const { checkRateLimit } = await loadLimiter();
+
+      rpc.mockResolvedValue({
+        data: null,
+        error: { code: "42883", message: "function does not exist" },
+      });
+
+      await checkRateLimit("comment", "user:1");
+      expect(rpc).toHaveBeenCalledTimes(1);
+
+      /* Straight away, it does not ask again. */
+      await checkRateLimit("comment", "user:1");
+      expect(rpc).toHaveBeenCalledTimes(1);
+
+      /* Once the migration has had time to be run, it does. */
+      vi.advanceTimersByTime(5 * 60_000 + 1);
+
+      rpc.mockResolvedValue({ data: 1, error: null });
+
+      const result = await checkRateLimit("comment", "user:1");
+
+      expect(rpc).toHaveBeenCalledTimes(2);
+      expect(result.allowed).toBe(true);
+      expect(result.remaining).toBe(9);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
