@@ -15,6 +15,12 @@ const VISITOR_COOKIE = "cs_visitor";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 const visitSchema = z.object({
+  /*
+   * A ping saying the visit is still open, not a new page. It moves
+   * the last-seen time so a long read is not mistaken for a bounce,
+   * and must not count as another page view.
+   */
+  stillHere: z.boolean().nullish(),
   landingPath: z.string().trim().max(300).nullish(),
   /* Where in the shop, when a storefront is on screen. */
   market: z.enum(["US", "KR"]).nullish(),
@@ -171,14 +177,18 @@ export async function POST(request: Request) {
       }
     };
 
+    const isPing = parsed.data.stillHere === true;
+
     if (seen) {
-      await recordPageView();
+      if (!isPing) {
+        await recordPageView();
+      }
 
       await supabase
         .from("site_visits")
         .update({
           last_seen_at: new Date().toISOString(),
-          page_views: (seen.page_views ?? 0) + 1,
+          page_views: (seen.page_views ?? 0) + (isPing ? 0 : 1),
           // Fill in the account if they signed in partway through.
           ...(state.userId ? { user_id: state.userId } : {}),
         })
@@ -233,7 +243,9 @@ export async function POST(request: Request) {
         throw new Error(insertError.message);
       }
 
-      await recordPageView();
+      if (!isPing) {
+        await recordPageView();
+      }
     }
 
     const response = NextResponse.json({ recorded: true });
