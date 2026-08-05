@@ -66,7 +66,54 @@ export default function VisitRecorder() {
     // Past the render tick, so it never delays the first paint.
     const timer = window.setTimeout(() => recordView(), 0);
 
-    return () => window.clearTimeout(timer);
+    /*
+     * Say goodbye on the way out, so time on site is the time they
+     * actually stayed. Without this the last thing recorded is the last
+     * page they opened, and someone who reads one page for ten minutes
+     * looks like they left immediately.
+     *
+     * sendBeacon survives the page being torn down, which a normal
+     * fetch does not. pagehide fires where unload does not on iOS.
+     */
+    const ping = () => {
+      try {
+        navigator.sendBeacon(
+          "/api/visits",
+          new Blob([JSON.stringify({ stillHere: true })], {
+            type: "application/json",
+          }),
+        );
+      } catch {
+        // Losing the last few seconds of a visit is not worth an error.
+      }
+    };
+
+    const onHidden = () => {
+      if (document.visibilityState === "hidden") {
+        ping();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onHidden);
+    window.addEventListener("pagehide", ping);
+
+    /*
+     * And while they are still reading. Someone on one page for a long
+     * time would otherwise be indistinguishable from someone who
+     * glanced and left.
+     */
+    const heartbeat = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        ping();
+      }
+    }, 60_000);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(heartbeat);
+      document.removeEventListener("visibilitychange", onHidden);
+      window.removeEventListener("pagehide", ping);
+    };
   }, []);
 
   return null;
