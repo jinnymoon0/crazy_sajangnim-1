@@ -11,6 +11,7 @@ import { useProducts } from "@/hooks/use-products";
 import type { BrandSlug } from "@/constants/brands";
 import type { CategorySlug } from "@/constants/categories";
 import type { Gender, Market, ProductSort } from "@/types/product";
+import { reportSearch } from "@/lib/analytics/report";
 
 type SelectableGender = Exclude<Gender, "UNISEX">;
 
@@ -27,6 +28,32 @@ export default function HomeClient({
   const [selectedBrands, setSelectedBrands] = useState<BrandSlug[]>([]);
 
   const [selectedCategory, setSelectedCategory] = useState<CategorySlug>("all");
+
+  /*
+   * There is no search box: choosing brands and a category is how
+   * someone searches here, so that is what gets recorded. Reported
+   * after the filters settle, because picking four brands is one
+   * search, not four.
+   *
+   * The empty default is skipped — arriving on the page is already a
+   * page view, and counting it again as a search would drown the real
+   * ones.
+   */
+  useEffect(() => {
+    if (selectedBrands.length === 0 && selectedCategory === "all") {
+      return;
+    }
+
+    reportSearch({
+      market,
+      gender,
+      metadata: {
+        brands: selectedBrands.join(","),
+        category: selectedCategory,
+        brandCount: selectedBrands.length,
+      },
+    });
+  }, [selectedBrands, selectedCategory, market, gender]);
 
   const [sort, setSort] = useState<ProductSort>("discount-desc");
 
