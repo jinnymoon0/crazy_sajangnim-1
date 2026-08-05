@@ -24,7 +24,14 @@ export interface SiteEvent {
   durationMs?: number | null;
 }
 
-let tableMissing = false;
+/*
+ * When to try again after finding the table absent. Time-limited
+ * rather than permanent, so running the migration takes effect on
+ * instances that are already warm.
+ */
+const RETRY_AFTER_MS = 5 * 60_000;
+
+let unavailableUntil = 0;
 
 /*
  * Returns whether the row was actually written, so a caller can report
@@ -33,7 +40,7 @@ let tableMissing = false;
  * table stays empty.
  */
 export async function recordEvent(event: SiteEvent): Promise<boolean> {
-  if (tableMissing) {
+  if (Date.now() < unavailableUntil) {
     return false;
   }
 
@@ -52,13 +59,13 @@ export async function recordEvent(event: SiteEvent): Promise<boolean> {
     if (error) {
       /* 42P01 missing relation, PGRST205 missing from the schema cache. */
       if (error.code === "42P01" || error.code === "PGRST205") {
-        if (!tableMissing) {
+        if (unavailableUntil === 0) {
           console.error(
             "Events are not being recorded. Run supabase/site-events.sql.",
           );
         }
 
-        tableMissing = true;
+        unavailableUntil = Date.now() + RETRY_AFTER_MS;
 
         return false;
       }
