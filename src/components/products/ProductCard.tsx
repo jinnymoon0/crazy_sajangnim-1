@@ -10,6 +10,7 @@ import {
   type BlogShareDraft,
 } from "@/types/blog";
 import type { Product } from "@/types/product";
+import { report } from "@/lib/analytics/report";
 
 interface ProductCardProps {
   product: Product;
@@ -32,6 +33,21 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
    */
   function handleOpen(event: MouseEvent<HTMLAnchorElement>) {
     if (isSignedIn) {
+      /*
+       * The one moment the site is worth something to a retailer, so
+       * it is the number worth having. Sent without awaiting: the tab
+       * is about to leave, and sendBeacon outlives the page.
+       */
+      report({
+        kind: "retailer_click",
+        metadata: {
+          retailer: product.sourceName,
+          brand: product.brandSlug,
+          productName: product.productName,
+          discount: product.discountPercentage,
+        },
+      });
+
       return;
     }
 

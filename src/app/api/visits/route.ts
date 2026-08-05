@@ -7,6 +7,11 @@ import { z } from "zod";
 import { isSameOriginRequest } from "@/lib/auth/api-helpers";
 import { getAuthState } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import {
+  callerKey,
+  checkRateLimit,
+  tooManyRequests,
+} from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,6 +86,16 @@ function getClientIp(request: Request): string | null {
  */
 export async function POST(request: Request) {
   try {
+    /*
+     * Unauthenticated and called from every page, so this is the one an
+     * abusive client reaches for first.
+     */
+    const limit = await checkRateLimit("visit", callerKey(request));
+
+    if (!limit.allowed) {
+      return tooManyRequests(limit);
+    }
+
     if (!isSameOriginRequest(request)) {
       return NextResponse.json(
         { error: "Cross-origin requests are not allowed." },

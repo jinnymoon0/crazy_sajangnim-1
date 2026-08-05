@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getSessionUser } from "@/lib/auth/session";
+import {
+  callerKey,
+  checkRateLimit,
+  tooManyRequests,
+} from "@/lib/rate-limit";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { BlogComment } from "@/types/blog";
 
@@ -179,6 +184,19 @@ export async function POST(request: Request, context: RouteContext) {
         { error: "Please log in to comment." },
         { status: 401 },
       );
+    }
+
+    /*
+     * Checked after the session, so the limit is per account rather
+     * than per address wherever possible.
+     */
+    const limit = await checkRateLimit(
+      "comment",
+      callerKey(request, sessionUser.id),
+    );
+
+    if (!limit.allowed) {
+      return tooManyRequests(limit);
     }
 
     const { id } = await context.params;

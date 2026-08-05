@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import { isSameOriginRequest } from "@/lib/auth/api-helpers";
 import { getAuthState } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import {
+  callerKey,
+  checkRateLimit,
+  tooManyRequests,
+} from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +42,12 @@ async function countLikes(postId: string): Promise<number> {
  */
 export async function POST(request: Request, context: RouteContext) {
   try {
+    const limit = await checkRateLimit("like", callerKey(request));
+
+    if (!limit.allowed) {
+      return tooManyRequests(limit);
+    }
+
     if (!isSameOriginRequest(request)) {
       return NextResponse.json(
         { error: "Cross-origin requests are not allowed." },

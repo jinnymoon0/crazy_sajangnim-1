@@ -3,6 +3,11 @@ import { z } from "zod";
 
 import { getSessionUser } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import {
+  callerKey,
+  checkRateLimit,
+  tooManyRequests,
+} from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -292,6 +297,16 @@ export async function POST(request: Request) {
   const uploadedImagePaths: string[] = [];
 
   try {
+    /*
+     * Publishing is the most expensive thing a reader can do — it
+     * writes rows and uploads images — so it carries the tightest limit.
+     */
+    const limit = await checkRateLimit("post", callerKey(request));
+
+    if (!limit.allowed) {
+      return tooManyRequests(limit);
+    }
+
     if (!isSameOriginRequest(request)) {
       return NextResponse.json(
         { error: "Cross-origin submissions are not allowed." },
