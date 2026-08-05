@@ -133,9 +133,10 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
     notFound();
   }
 
-  const { comments, ready: commentsReady } = await getBlogComments(post.id);
-
-  const engagement = await getPostEngagement(post.id, user.id);
+  const [{ comments, ready: commentsReady }, engagement] = await Promise.all([
+    getBlogComments(post.id),
+    getPostEngagement(post.id, user.id),
+  ]);
 
   /*
    * The names to show, taken from the accounts as they stand now rather

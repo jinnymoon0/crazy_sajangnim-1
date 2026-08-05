@@ -53,8 +53,15 @@ async function getBlogPosts(): Promise<BlogPost[]> {
 export default async function BlogPage() {
   const user = await requireOnboardedUser("/blog");
 
-  const posts = await getBlogPosts();
-  const engagement = await getEngagementByPost();
+  /*
+   * Together, not one after the other. The counts do not depend on the
+   * posts, and waiting for each in turn was most of the delay before
+   * this page appeared.
+   */
+  const [posts, engagement] = await Promise.all([
+    getBlogPosts(),
+    getEngagementByPost(),
+  ]);
 
   return (
     <main className="min-h-screen bg-neutral-100">
