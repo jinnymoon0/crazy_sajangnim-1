@@ -8,6 +8,7 @@ import BlogLikeButton from "@/components/blog/BlogLikeButton";
 import BlogPostManagement from "@/components/blog/BlogPostManagement";
 import { requireOnboardedUser } from "@/lib/auth/session";
 import { displayName, isAuthor } from "@/lib/blog/authorship";
+import { isViewerSuperAdmin } from "@/lib/blog/moderation";
 import { getCurrentUsernames } from "@/lib/blog/current-names";
 import { getPostEngagement } from "@/lib/blog/engagement";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -133,10 +134,12 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
     notFound();
   }
 
-  const [{ comments, ready: commentsReady }, engagement] = await Promise.all([
-    getBlogComments(post.id),
-    getPostEngagement(post.id, user.id),
-  ]);
+  const [{ comments, ready: commentsReady }, engagement, superAdmin] =
+    await Promise.all([
+      getBlogComments(post.id),
+      getPostEngagement(post.id, user.id),
+      isViewerSuperAdmin(),
+    ]);
 
   /*
    * The names to show, taken from the accounts as they stand now rather
@@ -249,11 +252,13 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               </div>
 
               {/*
-                Only the writer sees the edit and delete controls. The
-                route checks this too — hiding the button would leave it
-                open to anyone calling the API directly.
+                The writer sees the edit and delete controls, and so does
+                the super admin, who may change anything. The route
+                checks this too — hiding the button would leave it open
+                to anyone calling the API directly.
               */}
-              {isAuthor(
+              {superAdmin ||
+              isAuthor(
                 { user_id: post.user_id ?? null, author_name: post.author_name },
                 user,
               ) ? (
@@ -272,6 +277,8 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
           initialComments={namedComments}
           commentsReady={commentsReady}
           username={user.username}
+          viewerId={user.id}
+          isSuperAdmin={superAdmin}
         />
       </div>
     </main>

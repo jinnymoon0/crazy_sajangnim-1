@@ -68,7 +68,7 @@ export default function UsernamePicker({
           autoFocus
           value={username}
           onChange={(event) => setUsername(event.target.value)}
-          placeholder="예: 미친사장님 / crazy_sajang"
+          placeholder="e.g. crazy_sajang"
           className="w-full rounded-xl border border-neutral-300 px-4 py-3 text-sm outline-none transition focus:border-neutral-950"
         />
 
