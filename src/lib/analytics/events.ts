@@ -26,9 +26,15 @@ export interface SiteEvent {
 
 let tableMissing = false;
 
-export async function recordEvent(event: SiteEvent): Promise<void> {
+/*
+ * Returns whether the row was actually written, so a caller can report
+ * honestly. Saying "recorded" when the table does not exist turns a
+ * missing migration into a mystery: the API confirms the write and the
+ * table stays empty.
+ */
+export async function recordEvent(event: SiteEvent): Promise<boolean> {
   if (tableMissing) {
-    return;
+    return false;
   }
 
   try {
@@ -54,13 +60,19 @@ export async function recordEvent(event: SiteEvent): Promise<void> {
 
         tableMissing = true;
 
-        return;
+        return false;
       }
 
       console.error("Could not record an event:", error.message);
+
+      return false;
     }
+
+    return true;
   } catch (error) {
     console.error("Could not record an event:", error);
+
+    return false;
   }
 }
 

@@ -83,7 +83,7 @@ export async function POST(request: Request) {
         ]),
     );
 
-    await recordEvent({
+    const recorded = await recordEvent({
       kind: parsed.data.kind,
       visitorId,
       userId: state.userId,
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
       metadata,
     });
 
-    return NextResponse.json({ recorded: true });
+    return NextResponse.json({ recorded });
   } catch (error) {
     console.error("Event recording failed:", error);
 
