@@ -2,7 +2,11 @@
 
 import { type FormEvent, useState } from "react";
 
-export default function UsernamePicker() {
+export default function UsernamePicker({
+  destination,
+}: {
+  destination?: string | null;
+}) {
   const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,8 +36,12 @@ export default function UsernamePicker() {
         return;
       }
 
-      // Full reload so every part of the site sees the new username.
-      window.location.href = "/";
+      /*
+       * Full reload so every part of the site sees the new username —
+       * and back to whatever they were opening when they were asked to
+       * sign in.
+       */
+      window.location.href = destination ?? "/";
     } catch {
       setError("Failed to save the username.");
     } finally {

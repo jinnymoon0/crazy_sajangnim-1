@@ -6,15 +6,27 @@ import UsernamePicker from "@/components/auth/UsernamePicker";
 
 export const dynamic = "force-dynamic";
 
-export default async function ChooseUsernamePage() {
+export default async function ChooseUsernamePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callbackUrl?: string }>;
+}) {
+  const { callbackUrl } = await searchParams;
+
+  // Our own paths only, or this becomes a way to forward people out.
+  const destination =
+    callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
+      ? callbackUrl
+      : null;
+
   const state = await getAuthState();
 
   if (!state.authenticated) {
-    redirect("/login");
+    redirect(`/login${destination ? `?callbackUrl=${encodeURIComponent(destination)}` : ""}`);
   }
 
   if (state.username) {
-    redirect("/");
+    redirect(destination ?? "/");
   }
 
   return (
@@ -30,7 +42,7 @@ export default async function ChooseUsernamePage() {
       </p>
 
       <section className="w-full max-w-md rounded-3xl border border-black/10 bg-white p-6 shadow-sm sm:p-8">
-        <UsernamePicker />
+        <UsernamePicker destination={destination} />
       </section>
 
       <div className="mt-6">
