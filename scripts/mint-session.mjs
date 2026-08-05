@@ -6,7 +6,9 @@
  * the cookie has to be sealed exactly the way the app expects to open
  * it, and a script outside the project cannot resolve that module.
  *
- *   node scripts/mint-session.mjs <google_sub> <email>
+ *   node scripts/mint-session.mjs <google_sub> <email> [cookie-name]
+ *
+ * The cookie name is also the salt; production uses the __Secure- form.
  */
 
 import { readFileSync } from "node:fs";
@@ -25,7 +27,7 @@ for (const line of readFileSync(
   }
 }
 
-const [sub, email] = process.argv.slice(2);
+const [sub, email, salt] = process.argv.slice(2);
 
 if (!sub) {
   console.error("usage: node scripts/mint-session.mjs <google_sub> [email]");
@@ -46,7 +48,7 @@ const token = await encode({
     googleEmailVerified: true,
   },
   secret,
-  salt: "authjs.session-token",
+  salt: salt ?? "authjs.session-token",
   maxAge: 60 * 60,
 });
 
