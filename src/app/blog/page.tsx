@@ -51,7 +51,7 @@ async function getBlogPosts(): Promise<BlogPost[]> {
 }
 
 export default async function BlogPage() {
-  const user = await requireOnboardedUser();
+  const user = await requireOnboardedUser("/blog");
 
   const posts = await getBlogPosts();
   const engagement = await getEngagementByPost();

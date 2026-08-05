@@ -192,15 +192,30 @@ export async function getAuthState(): Promise<AuthState> {
  * /choose-username. Pages call this so the redirect never depends on
  * client-side JavaScript.
  */
-export async function requireOnboardedUser(): Promise<SessionUser> {
+/*
+ * Where they were headed, carried through sign-in and username choice
+ * so a shared link still opens the post it pointed at. Someone arriving
+ * on a link to a post has no account yet more often than not, and
+ * dropping them on the front page loses whatever they were sent.
+ */
+export async function requireOnboardedUser(
+  next?: string,
+): Promise<SessionUser> {
   const state = await getAuthState();
 
+  const destination =
+    next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+
+  const query = destination
+    ? `?callbackUrl=${encodeURIComponent(destination)}`
+    : "";
+
   if (!state.authenticated) {
-    redirect("/login");
+    redirect(`/login${query}`);
   }
 
   if (!state.userId || !state.username) {
-    redirect("/choose-username");
+    redirect(`/choose-username${query}`);
   }
 
   return {

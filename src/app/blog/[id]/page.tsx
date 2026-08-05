@@ -123,9 +123,10 @@ async function getBlogComments(postId: string): Promise<CommentsResult> {
 }
 
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
-  const user = await requireOnboardedUser();
-
   const { id } = await params;
+
+  // So a shared link still opens this post after signing in.
+  const user = await requireOnboardedUser(`/blog/${id}`);
   const post = await getBlogPost(id);
 
   if (!post) {
