@@ -40,8 +40,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       </h1>
 
       <p className="mb-8 max-w-sm text-center text-sm leading-6 text-neutral-600">
-        Sign in with Google to browse designer sales and share clothing
-        finds.
+        Browsing sales and reading the blog need no account. Sign in to
+        open a post, write one, comment, or share a find.
       </p>
 
       <section className="w-full max-w-md rounded-3xl border border-black/10 bg-white p-6 shadow-sm sm:p-8">

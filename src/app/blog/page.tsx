@@ -6,7 +6,7 @@ import { displayName } from "@/lib/blog/authorship";
 import { getCurrentUsernames } from "@/lib/blog/current-names";
 import { getEngagementByPost } from "@/lib/blog/engagement";
 import BlogPostForm from "@/components/blog/BlogPostForm";
-import { requireOnboardedUser } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { BlogPost } from "@/types/blog";
 
@@ -51,7 +51,16 @@ async function getBlogPosts(): Promise<BlogPost[]> {
 }
 
 export default async function BlogPage() {
-  const user = await requireOnboardedUser("/blog");
+  /*
+   * Readable signed out. Someone following a link here should see what
+   * is being written about before being asked for anything; the account
+   * is wanted at the point of taking part, not at the door.
+   *
+   * getSessionUser rather than requireOnboardedUser: it answers null
+   * for a visitor and for a half-finished sign-up alike, and neither
+   * should be shown a form they cannot post with.
+   */
+  const user = await getSessionUser();
 
   /*
    * Together, not one after the other. The counts do not depend on the
@@ -99,7 +108,28 @@ export default async function BlogPage() {
 
         <div className="grid items-start gap-10 lg:grid-cols-[380px_minmax(0,1fr)]">
           <div className="lg:sticky lg:top-6">
-            <BlogPostForm username={user.username} />
+            {user ? (
+              <BlogPostForm username={user.username} />
+            ) : (
+              <section className="rounded-3xl border border-black/10 bg-white p-6 shadow-sm sm:p-8">
+                <h2 className="text-sm font-bold uppercase tracking-[0.16em] text-neutral-500">
+                  Write a post
+                </h2>
+
+                <p className="mt-3 text-base leading-7 text-neutral-600">
+                  Posts are published under your account name, so writing
+                  one, opening a post, or leaving a comment needs an
+                  account. Reading along does not.
+                </p>
+
+                <Link
+                  href="/login?callbackUrl=%2Fblog"
+                  className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-neutral-950 px-5 py-2.5 text-sm font-bold !text-white transition hover:bg-neutral-700 hover:!text-white"
+                >
+                  Sign in with Google
+                </Link>
+              </section>
+            )}
           </div>
 
           <BlogFeed

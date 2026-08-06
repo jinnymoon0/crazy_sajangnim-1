@@ -3,9 +3,12 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 
 /*
- * The shop is open to anyone. The blog is where people write under a
- * name, so it needs an account — reading it, posting to it, and
- * commenting alike.
+ * The shop is open to anyone, and so is the front of the blog: someone
+ * arriving from a link should see what is being written about before
+ * being asked for anything.
+ *
+ * An account is needed at the point of taking part — opening a post,
+ * writing one, commenting, or sharing a find to the blog.
  *
  * Anyone sent away is sent back afterwards, so following a link to a
  * post, or pressing "Share on blog", lands where it was going once they
@@ -38,8 +41,18 @@ export const proxy = auth((request) => {
 export const config = {
   /*
    * Only what needs an account. Everything else — the shop, the catalog
-   * it reads, the contact box — is reachable signed out, and the routes
-   * that still need a session check for one themselves.
+   * it reads, the blog's front page, the contact box — is reachable
+   * signed out, and the routes that still need a session check for one
+   * themselves.
+   *
+   * "/blog/:path+" rather than ":path*": the star form matches zero
+   * segments and so would take "/blog" itself with it, which is the one
+   * blog page that must stay open.
    */
-  matcher: ["/blog", "/blog/:path*", "/choose-username", "/api/blog/:path*"],
+  matcher: [
+    "/blog/:path+",
+    "/choose-username",
+    "/api/blog",
+    "/api/blog/:path*",
+  ],
 };
