@@ -19,6 +19,32 @@ export const dynamic = "force-dynamic";
 const VISITOR_COOKIE = "cs_visitor";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
+/*
+ * Is there a person behind this request.
+ *
+ * This route is open by necessity — a visitor has no account and no
+ * token, so anything able to send a POST was being counted as someone
+ * arriving. Twelve of a hundred and twenty-five recorded visitors
+ * turned out to be curl from a laptop, which is a tenth of the traffic
+ * figures describing nobody.
+ *
+ * Tested by what a browser has rather than by listing the tools that
+ * are not one. Every browser in use sends a User-Agent beginning
+ * Mozilla/; curl, wget, the HTTP libraries and the uptime monitors do
+ * not, and a blocklist would need extending every time a new one
+ * appeared. Crawlers that identify themselves as Googlebot do carry
+ * Mozilla/ and stay counted on purpose: they are not people, but real
+ * crawler traffic is worth being able to see, and the admin already
+ * separates them out by user agent.
+ */
+function looksLikeBrowser(userAgent: string | null): boolean {
+  if (!userAgent) {
+    return false;
+  }
+
+  return userAgent.startsWith("Mozilla/");
+}
+
 const visitSchema = z.object({
   /*
    * A ping saying the visit is still open, not a new page. It moves
@@ -101,6 +127,17 @@ export async function POST(request: Request) {
         { error: "Cross-origin requests are not allowed." },
         { status: 403 },
       );
+    }
+
+    /*
+     * Answered normally rather than refused. A script that gets a 4xx
+     * here learns it has been spotted and an uptime monitor pointed at
+     * this path would start alerting on a healthy route; both are worse
+     * than quietly not counting. Nothing is written and no cookie is
+     * set, so a non-browser never becomes a returning visitor either.
+     */
+    if (!looksLikeBrowser(request.headers.get("user-agent"))) {
+      return NextResponse.json({ recorded: false });
     }
 
     const body: unknown = await request.json().catch(() => ({}));
