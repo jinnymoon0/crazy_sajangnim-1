@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import posthog from "posthog-js";
 
 export default function GoogleSignInButton({
   callbackUrl,
@@ -16,6 +17,8 @@ export default function GoogleSignInButton({
     setError(null);
 
     try {
+      posthog.capture("google_sign_in_started");
+
       await signIn("google", {
         redirectTo: callbackUrl ?? "/",
       });

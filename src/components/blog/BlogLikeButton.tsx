@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import posthog from "posthog-js";
 
 interface BlogLikeButtonProps {
   postId: string;
@@ -56,8 +57,11 @@ export default function BlogLikeButton({
         return;
       }
 
-      setLiked(body.liked === true);
+      const nextLiked = body.liked === true;
+
+      setLiked(nextLiked);
       setCount(body.likeCount);
+      posthog.capture("blog_post_like_toggled", { liked: nextLiked });
     } catch {
       setLiked(previous.liked);
       setCount(previous.count);

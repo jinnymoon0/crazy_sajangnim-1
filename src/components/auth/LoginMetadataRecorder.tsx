@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
+import posthog from "posthog-js";
 
 interface CurrentUserResponse {
   user?: {
     id: string;
+    username: string | null;
+    name: string | null;
   } | null;
 }
 
@@ -38,6 +41,11 @@ export default function LoginMetadataRecorder() {
         if (!sessionBody.user) {
           return;
         }
+
+        posthog.identify(sessionBody.user.id, {
+          username: sessionBody.user.username,
+          name: sessionBody.user.name,
+        });
 
         const timezone =
           Intl.DateTimeFormat().resolvedOptions().timeZone || null;
