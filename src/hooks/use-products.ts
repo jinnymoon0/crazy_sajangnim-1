@@ -55,6 +55,28 @@ export function useProducts(market: Market, gender: Exclude<Gender, "UNISEX">) {
       revalidateOnReconnect: false,
       dedupingInterval: 5 * 60 * 1000,
       keepPreviousData: true,
+
+      /*
+       * Pick up newly collected stock without anyone reloading the
+       * page. The collector runs hourly, so asking more often would
+       * only re-fetch the same rows.
+       */
+      refreshInterval: 60 * 60 * 1000,
+
+      /*
+       * Only while someone is actually looking. SWR pauses polling on
+       * a hidden tab by default, and that is wanted: a tab left open
+       * for a week should not spend a request an hour, nor keep a
+       * phone's radio busy, to refresh a page nobody is reading.
+       */
+      refreshWhenHidden: false,
+
+      /*
+       * A background refresh must never blank the grid. keepPreviousData
+       * holds the current products while the new ones arrive, so the
+       * page updates in place rather than flashing empty on the hour.
+       */
+      revalidateIfStale: true,
     },
   );
 }
