@@ -53,15 +53,31 @@ export function useProducts(market: Market, gender: Exclude<Gender, "UNISEX">) {
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
-      dedupingInterval: 5 * 60 * 1000,
+      /*
+       * Well under the refresh interval, on purpose. Deduping exists to
+       * collapse the burst of requests a re-render can cause, not to
+       * gate the scheduled poll — and when the two windows were equal a
+       * refresh landing on the boundary could be swallowed as a
+       * duplicate, leaving the page stale with nothing to show for it.
+       */
+      dedupingInterval: 30 * 1000,
       keepPreviousData: true,
 
       /*
        * Pick up newly collected stock without anyone reloading the
-       * page. The collector runs hourly, so asking more often would
-       * only re-fetch the same rows.
+       * page.
+       *
+       * Five minutes because that is how long the edge holds a catalog
+       * response (s-maxage=300). Polling faster cannot return anything
+       * newer — it re-downloads bytes the CDN has already decided are
+       * current — and polling slower leaves the page staler than the
+       * data it could be showing.
+       *
+       * This costs nothing in build minutes: it is the visitor's
+       * browser asking a cached endpoint, not the collector running.
+       * 27 KB gzipped, so about 0.3 MB an hour for a tab left open.
        */
-      refreshInterval: 60 * 60 * 1000,
+      refreshInterval: 5 * 60 * 1000,
 
       /*
        * Only while someone is actually looking. SWR pauses polling on
