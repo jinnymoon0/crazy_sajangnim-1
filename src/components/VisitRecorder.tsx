@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import posthog from "posthog-js";
 
 /*
  * Tell the server this browser called, once per load.
@@ -56,9 +57,32 @@ export function recordView(context?: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
     keepalive: true,
-  }).catch(() => {
-    // Recording a visit is never worth interrupting one.
-  });
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        return;
+      }
+
+      const body = (await response.json()) as { visitorId?: string };
+
+      if (!body.visitorId) {
+        return;
+      }
+
+      /*
+       * Registered rather than sent once, so every event and every
+       * session recording from this browser carries it. That is what
+       * makes a recording joinable to the visit rows, the page views
+       * and the events already stored in Supabase against the same id.
+       *
+       * Registering the same value repeatedly is harmless; it is one
+       * key in the stored super properties.
+       */
+      posthog.register({ cs_visitor_id: body.visitorId });
+    })
+    .catch(() => {
+      // Recording a visit is never worth interrupting one.
+    });
 }
 
 export default function VisitRecorder() {

@@ -263,7 +263,16 @@ export async function POST(request: Request) {
       }
     }
 
-    const response = NextResponse.json({ recorded: true });
+    /*
+     * The visitor id goes back to the browser as well as into the
+     * cookie. The cookie stays httpOnly — script must not be able to
+     * read it off document.cookie — but the analytics client needs the
+     * value to tag recordings with it, so it is handed over deliberately
+     * in the response to a same-origin request rather than by loosening
+     * the cookie. It identifies a browser, not an account, and PostHog
+     * already holds its own id for the same session.
+     */
+    const response = NextResponse.json({ recorded: true, visitorId });
 
     response.cookies.set(VISITOR_COOKIE, visitorId, {
       httpOnly: true,
