@@ -23,6 +23,19 @@ if (!projectToken || !host) {
     debug: process.env.NODE_ENV === "development",
 
     /*
+     * Capture page views explicitly, on history changes as well as the
+     * first load, because this is a single-page app: without it a
+     * reader moving between the shop and the blog registers as one
+     * page for the whole visit.
+     *
+     * Set by name rather than left to the defaults bundle. PostHog was
+     * recording $pageleave and never $pageview — every page-based
+     * panel in the admin was empty, and no amount of reading the
+     * config explained it.
+     */
+    capture_pageview: "history_change",
+
+    /*
      * Record every session, signed in or not. Recording starts as soon
      * as the library initialises, so a visitor who never signs in is
      * captured from their first page — which is most of the traffic and
