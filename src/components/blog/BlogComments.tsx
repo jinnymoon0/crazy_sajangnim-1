@@ -6,6 +6,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import posthog from "posthog-js";
 
 import type { BlogComment } from "@/types/blog";
 
@@ -129,6 +130,8 @@ export default function BlogComments({
     try {
       await postComment(replyContent, parentId);
 
+      posthog.capture("blog_comment_created", { is_reply: true });
+
       setReplyContent("");
       setReplyingTo(null);
       setStatus({ type: "success", message: "Your reply has been posted." });
@@ -177,6 +180,10 @@ export default function BlogComments({
       if (!response.ok) {
         throw new Error(result.error ?? "Failed to delete the comment.");
       }
+
+      posthog.capture("blog_comment_deleted", {
+        deleted_reply_count: replyCount,
+      });
 
       setStatus({ type: "success", message: "The comment has been deleted." });
 
@@ -369,6 +376,8 @@ export default function BlogComments({
 
     try {
       await postComment(content, null);
+
+      posthog.capture("blog_comment_created", { is_reply: false });
 
       setContent("");
       setStatus({

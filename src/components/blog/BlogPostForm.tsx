@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
 
 import { compressImageForUpload } from "@/lib/images/compress-image";
 import { formatPrice } from "@/lib/utils";
@@ -321,6 +322,11 @@ export default function BlogPostForm({ username }: BlogPostFormProps) {
             `Failed to publish the post. (${response.status})`,
         );
       }
+
+      posthog.capture("blog_post_published", {
+        image_count: uploadFiles.length + (sharedImageUrl ? 1 : 0),
+        shared_product: Boolean(sharedImageUrl),
+      });
 
       formRef.current?.reset();
       clearPreviewUrls();

@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import posthog from "posthog-js";
 
 export default function UsernamePicker({
   destination,
@@ -35,6 +36,8 @@ export default function UsernamePicker({
 
         return;
       }
+
+      posthog.capture("username_selected");
 
       /*
        * Full reload so every part of the site sees the new username —

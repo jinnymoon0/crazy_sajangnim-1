@@ -5,6 +5,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
 
 type BlogPostManagementProps = {
   postId: string;
@@ -88,6 +89,8 @@ export default function BlogPostManagement({
         );
       }
 
+      posthog.capture("blog_post_updated");
+
       setStatus({
         type: "success",
         message: "The post was updated.",
@@ -144,6 +147,8 @@ export default function BlogPostManagement({
           result.error ?? "Failed to delete the post.",
         );
       }
+
+      posthog.capture("blog_post_deleted");
 
       router.push("/blog");
       router.refresh();

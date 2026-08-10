@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
+import posthog from "posthog-js";
 
 interface MeUser {
+  id: string;
   username: string | null;
   name: string | null;
   picture: string | null;
@@ -82,7 +84,10 @@ export default function AccountMenu() {
 
       <button
         type="button"
-        onClick={() => void signOut({ callbackUrl: "/login" })}
+        onClick={() => {
+          posthog.reset();
+          void signOut({ callbackUrl: "/login" });
+        }}
         className="inline-flex min-h-9 items-center rounded-full border border-black/15 bg-white px-3 text-xs transition hover:bg-black hover:text-white"
       >
         Log out

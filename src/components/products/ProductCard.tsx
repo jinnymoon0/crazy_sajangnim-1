@@ -3,6 +3,7 @@
 import { type MouseEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
 
 import { formatPrice } from "@/lib/utils";
 import {
@@ -38,6 +39,12 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
        * it is the number worth having. Sent without awaiting: the tab
        * is about to leave, and sendBeacon outlives the page.
        */
+      posthog.capture("product_retailer_opened", {
+        retailer: product.sourceName,
+        brand: product.brandSlug,
+        discount_percentage: product.discountPercentage,
+      });
+
       report({
         kind: "retailer_click",
         metadata: {
@@ -67,6 +74,12 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
     : `/login?callbackUrl=${encodeURIComponent("/blog")}`;
 
   function handleShare() {
+    if (isSignedIn) {
+      posthog.capture("product_shared_to_blog", {
+        retailer: product.sourceName,
+        brand: product.brandSlug,
+      });
+    }
 
     const draft: BlogShareDraft = {
       brandName: product.brandName,

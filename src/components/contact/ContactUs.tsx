@@ -8,6 +8,7 @@ import {
   type FormEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import posthog from "posthog-js";
 
 import { compressImageForUpload } from "@/lib/images/compress-image";
 
@@ -180,6 +181,11 @@ export default function ContactUs() {
 
         return;
       }
+
+      posthog.capture("contact_message_sent", {
+        topic,
+        attachment_count: photos.length,
+      });
 
       setSent(true);
       setMessage("");
