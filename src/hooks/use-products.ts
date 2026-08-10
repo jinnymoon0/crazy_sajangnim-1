@@ -51,8 +51,19 @@ export function useProducts(market: Market, gender: Exclude<Gender, "UNISEX">) {
     `/api/catalog/products?${query.toString()}`,
     fetcher,
     {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
+      /*
+       * Refresh when someone comes back to the tab. Polling is paused
+       * while the tab is hidden (see refreshWhenHidden), so without
+       * this a tab left in the background for an hour showed hour-old
+       * stock for up to five more minutes after being returned to —
+       * the one moment a visitor is definitely looking, spent on the
+       * stalest data of the whole session.
+       *
+       * Cheap now that the edge caches the response: someone flicking
+       * between tabs is answered from the CDN, not by a function.
+       */
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
       /*
        * Well under the refresh interval, on purpose. Deduping exists to
        * collapse the burst of requests a re-render can cause, not to

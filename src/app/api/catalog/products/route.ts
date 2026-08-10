@@ -3,13 +3,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { recordEvent, recordFailure } from "@/lib/analytics/events";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+
+/*
+ * Deliberately not force-dynamic. This handler reads the query string,
+ * so it is dynamic whatever it says here — but declaring it explicitly
+ * stopped the edge honouring the Cache-Control set below: the response
+ * came back as a bare "public" with s-maxage stripped, and every open
+ * tab's five-minute poll ran a function to fetch bytes that had not
+ * changed. The catalog turns over every four hours.
+ */
 
 /*
  * Catalog reads are served by the separate backend service
  * (crazy-sajangnim-backend). The browser keeps calling this path, and
  * the request is forwarded server-side so the service token never
- * reaches the client and the catalog stays behind the site's login.
+ * reaches the client.
  */
 export async function GET(request: NextRequest) {
   const backendUrl = process.env.BACKEND_URL?.trim();
@@ -73,12 +81,25 @@ export async function GET(request: NextRequest) {
           },
         ));
 
+    /*
+     * The catalog is identical for every visitor — no cookie, no
+     * session, and the service token is added here rather than sent by
+     * the browser — so the edge can hold it and absorb the poll every
+     * open tab makes.
+     *
+     * A failure is deliberately not cached. This route passes the
+     * upstream status straight through, and a 401 or a 500 pinned at
+     * the edge for five minutes would turn a momentary backend blip
+     * into an outage that retrying could not clear.
+     */
     return new NextResponse(body, {
       status: response.status,
       headers: {
         "Content-Type":
           response.headers.get("content-type") ?? "application/json",
-        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=900",
+        "Cache-Control": response.ok
+          ? "public, s-maxage=300, stale-while-revalidate=900"
+          : "no-store",
       },
     });
   } catch (error) {
