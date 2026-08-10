@@ -70,15 +70,21 @@ export function recordView(context?: {
       }
 
       /*
-       * Registered rather than sent once, so every event and every
-       * session recording from this browser carries it. That is what
-       * makes a recording joinable to the visit rows, the page views
-       * and the events already stored in Supabase against the same id.
+       * Twice, because the two do different jobs and only one of them
+       * answers the question the admin asks.
        *
-       * Registering the same value repeatedly is harmless; it is one
-       * key in the stored super properties.
+       * register() puts it on every event, which is what relates our
+       * events to the visit rows in Supabase.
+       *
+       * setPersonProperties() puts it on the person, which is the only
+       * place the session recordings API looks: a recording carries a
+       * person, not the events inside it. Without this the admin lists
+       * a recording it cannot tie back to anything, which is exactly
+       * what it did until this was measured against the real API.
        */
       posthog.register({ cs_visitor_id: body.visitorId });
+
+      posthog.setPersonProperties({ cs_visitor_id: body.visitorId });
     })
     .catch(() => {
       // Recording a visit is never worth interrupting one.
