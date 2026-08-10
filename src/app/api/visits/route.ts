@@ -28,21 +28,34 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
  * turned out to be curl from a laptop, which is a tenth of the traffic
  * figures describing nobody.
  *
- * Tested by what a browser has rather than by listing the tools that
- * are not one. Every browser in use sends a User-Agent beginning
- * Mozilla/; curl, wget, the HTTP libraries and the uptime monitors do
- * not, and a blocklist would need extending every time a new one
- * appeared. Crawlers that identify themselves as Googlebot do carry
- * Mozilla/ and stay counted on purpose: they are not people, but real
- * crawler traffic is worth being able to see, and the admin already
- * separates them out by user agent.
+ * Two tests, because neither alone is enough.
+ *
+ * First, what a browser has rather than a list of the tools that are
+ * not one: every browser sends a User-Agent beginning Mozilla/, while
+ * curl, wget, the HTTP libraries and the uptime monitors do not. A
+ * blocklist alone would need extending every time a new tool appeared.
+ *
+ * Then the things that do send Mozilla/ and still are not a person.
+ * Googlebot announces itself inside an otherwise ordinary Chrome
+ * string, and headless Chrome is literally a browser — eleven of the
+ * hundred and thirteen visitors in the table were automated browsers,
+ * including the ones used to check this very site. A first test that
+ * asks "is this a browser" cannot see either of them, because the
+ * honest answer is yes.
  */
+const NOT_A_PERSON =
+  /bot\b|bot\/|crawl|spider|slurp|headless|lighthouse|pagespeed|gtmetrix|pingdom|uptime|statuscake|facebookexternalhit|whatsapp|telegram|discord|embedly|bingpreview|semrush|ahrefs|mj12|petalbot|dataprovider|yandex|baidu|archive\.org/i;
+
 function looksLikeBrowser(userAgent: string | null): boolean {
   if (!userAgent) {
     return false;
   }
 
-  return userAgent.startsWith("Mozilla/");
+  if (!userAgent.startsWith("Mozilla/")) {
+    return false;
+  }
+
+  return !NOT_A_PERSON.test(userAgent);
 }
 
 const visitSchema = z.object({
