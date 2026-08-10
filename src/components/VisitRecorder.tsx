@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import posthog from "posthog-js";
 
 /*
  * Tell the server this browser called, once per load.
@@ -56,9 +57,38 @@ export function recordView(context?: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
     keepalive: true,
-  }).catch(() => {
-    // Recording a visit is never worth interrupting one.
-  });
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        return;
+      }
+
+      const body = (await response.json()) as { visitorId?: string };
+
+      if (!body.visitorId) {
+        return;
+      }
+
+      /*
+       * Twice, because the two do different jobs and only one of them
+       * answers the question the admin asks.
+       *
+       * register() puts it on every event, which is what relates our
+       * events to the visit rows in Supabase.
+       *
+       * setPersonProperties() puts it on the person, which is the only
+       * place the session recordings API looks: a recording carries a
+       * person, not the events inside it. Without this the admin lists
+       * a recording it cannot tie back to anything, which is exactly
+       * what it did until this was measured against the real API.
+       */
+      posthog.register({ cs_visitor_id: body.visitorId });
+
+      posthog.setPersonProperties({ cs_visitor_id: body.visitorId });
+    })
+    .catch(() => {
+      // Recording a visit is never worth interrupting one.
+    });
 }
 
 export default function VisitRecorder() {
