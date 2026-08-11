@@ -55,7 +55,13 @@ export default function HomeClient({
     });
   }, [selectedBrands, selectedCategory, market, gender]);
 
-  const [sort, setSort] = useState<ProductSort>("discount-desc");
+  /*
+   * Newest first. The catalogue collects itself every hour and the
+   * point of that is for people to see what has just landed, which the
+   * biggest-discount order buried: a fresh arrival is rarely also the
+   * deepest reduction in the shop, so it sat pages down.
+   */
+  const [sort, setSort] = useState<ProductSort>("newest");
 
   /*
    * Changing storefront is this shop's equivalent of turning to another
@@ -77,6 +83,7 @@ export default function HomeClient({
   const { data, error, isLoading } = useProducts(
     market,
     gender,
+    sort,
   );
 
   const products = useMemo(() => {
@@ -104,11 +111,29 @@ export default function HomeClient({
         case "price-desc":
           return second.salePrice - first.salePrice;
 
-        case "newest":
-          return (
-            new Date(second.collectedAt).getTime() -
-            new Date(first.collectedAt).getTime()
-          );
+        /*
+         * firstSeenAt, not collectedAt. Every refresh rewrites
+         * collectedAt for everything still in stock, so ordering by it
+         * ranked the whole shop by when we last looked rather than by
+         * when anything arrived — after a run, nearly every item shared
+         * one timestamp and the order was effectively arbitrary.
+         */
+        case "newest": {
+          const firstArrived = new Date(
+            first.firstSeenAt ?? first.collectedAt,
+          ).getTime();
+
+          const secondArrived = new Date(
+            second.firstSeenAt ?? second.collectedAt,
+          ).getTime();
+
+          if (secondArrived !== firstArrived) {
+            return secondArrived - firstArrived;
+          }
+
+          /* A whole collection shares a timestamp; keep the order stable. */
+          return first.id.localeCompare(second.id);
+        }
 
         case "discount-desc":
         default: {
