@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 
-import type { Gender, Market, Product } from "@/types/product";
+import type { Gender, Market, Product, ProductSort } from "@/types/product";
 
 interface ProductResponse {
   products: Product[];
@@ -38,13 +38,27 @@ async function fetcher(url: string): Promise<ProductResponse> {
   return body as ProductResponse;
 }
 
-export function useProducts(market: Market, gender: Exclude<Gender, "UNISEX">) {
+export function useProducts(
+  market: Market,
+  gender: Exclude<Gender, "UNISEX">,
+  sort: ProductSort = "newest",
+) {
+  /*
+   * The chosen order is asked of the service, not applied afterwards.
+   *
+   * This always requested discount-desc and let the page re-sort the
+   * three hundred it got back — so every order was really a reshuffle
+   * of the three hundred deepest discounts. "Recently added" could not
+   * show a new item unless that item also happened to be among the
+   * biggest reductions in the shop, which is the one thing a new
+   * arrival usually is not.
+   */
   const query = new URLSearchParams({
     market,
     gender,
     page: "1",
     size: "300",
-    sort: "discount-desc",
+    sort,
   });
 
   return useSWR<ProductResponse>(
