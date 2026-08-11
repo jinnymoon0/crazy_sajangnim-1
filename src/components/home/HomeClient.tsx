@@ -74,7 +74,7 @@ export default function HomeClient({
     recordView({ market, gender });
   }, [market, gender]);
 
-  const { data, error, isLoading, isValidating, mutate } = useProducts(
+  const { data, error, isLoading } = useProducts(
     market,
     gender,
   );
@@ -203,16 +203,15 @@ export default function HomeClient({
             </p>
           </div>
 
+          {/*
+            No reload button. The catalogue refreshes itself every five
+            minutes, on returning to the tab, and on reconnecting, so
+            the button asked people to do by hand a job already done for
+            them — and pressing it on a cached response returned the same
+            listings, which reads as the site being broken rather than
+            already current.
+          */}
           <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => mutate()}
-              disabled={isValidating}
-              className="h-11 border border-black/15 px-4 text-sm transition hover:bg-black hover:text-white disabled:opacity-40"
-            >
-              {isValidating ? "Reloading..." : "Reload catalog"}
-            </button>
-
             <select
               value={sort}
               onChange={(event) => setSort(event.target.value as ProductSort)}
