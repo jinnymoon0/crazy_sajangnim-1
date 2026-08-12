@@ -54,7 +54,7 @@ export default function AccountMenu() {
     return (
       <Link
         href="/login"
-        className="inline-flex min-h-9 items-center rounded-full border border-black/15 bg-white px-3 text-xs font-semibold transition hover:bg-black hover:text-white md:px-4 md:text-sm"
+        className="inline-flex min-h-9 items-center justify-center rounded-full border border-black/15 bg-white px-3 text-xs font-semibold transition hover:bg-black hover:text-white md:px-4 md:text-sm"
       >
         Log in
       </Link>
@@ -65,21 +65,29 @@ export default function AccountMenu() {
 
   return (
     <div className="flex items-center gap-2">
-      {user.picture ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={user.picture}
-          alt=""
-          referrerPolicy="no-referrer"
-          className="h-7 w-7 rounded-full border border-black/10"
-        />
-      ) : null}
-
+      {/*
+        The name sits in the same pill as the buttons either side of it.
+        Loose in the row it was the one thing in the header without a
+        shape, so a signed-in header read as three buttons with a stray
+        avatar wedged between them rather than as one set of controls.
+      */}
       <span
         title={displayName}
-        className="max-w-24 truncate text-xs font-semibold md:max-w-36 md:text-sm"
+        className="inline-flex min-h-9 max-w-32 items-center gap-2 rounded-full border border-black/15 bg-white px-3 md:max-w-44 md:px-4"
       >
-        {displayName}
+        {user.picture ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={user.picture}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="h-5 w-5 shrink-0 rounded-full border border-black/10"
+          />
+        ) : null}
+
+        <span className="truncate text-xs font-semibold md:text-sm">
+          {displayName}
+        </span>
       </span>
 
       <button
@@ -88,7 +96,7 @@ export default function AccountMenu() {
           posthog.reset();
           void signOut({ callbackUrl: "/login" });
         }}
-        className="inline-flex min-h-9 items-center rounded-full border border-black/15 bg-white px-3 text-xs transition hover:bg-black hover:text-white"
+        className="inline-flex min-h-9 items-center justify-center rounded-full border border-black/15 bg-white px-3 text-xs font-semibold transition hover:bg-black hover:text-white md:px-4 md:text-sm"
       >
         Log out
       </button>
