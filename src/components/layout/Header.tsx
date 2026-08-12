@@ -23,7 +23,20 @@ export function Header({
 }: HeaderProps) {
   return (
     <header className="sticky top-0 z-30 border-b border-black/10 bg-[#f5f2ea]/95 backdrop-blur">
-      <div className="grid min-h-20 grid-cols-[1fr_auto_1fr] items-center px-4 md:px-10">
+      {/*
+        Two rows until lg, one above it.
+
+        A menu, a wordmark and 268px of controls do not fit across
+        375px, and every way of forcing them into one row failed
+        differently: left alone the row pushed the page wider than the
+        screen and the fixed blog button went off the right edge;
+        allowed to wrap it stacked into three ragged lines; allowed to
+        shrink it slid under the wordmark. Giving the controls their own
+        row costs a little height below lg and nothing at all above it.
+        The switch is lg rather than md because at 800px the wordmark and
+        the controls still met in the middle.
+      */}
+      <div className="grid min-h-20 grid-cols-[auto_1fr_auto] items-center gap-y-2 px-4 py-2 lg:grid-cols-[1fr_auto_1fr] lg:gap-y-0 lg:px-10 lg:py-0">
         <div>
           <button
             type="button"
@@ -35,11 +48,20 @@ export function Header({
           </button>
         </div>
 
-        <h1 className="font-diploma whitespace-nowrap text-center text-2xl md:text-5xl">
+        <h1 className="font-diploma col-start-2 whitespace-nowrap text-center text-2xl md:text-4xl lg:text-5xl">
           Crazy Sajangnim
         </h1>
 
-        <div className="flex items-center justify-end gap-2 md:gap-3">
+        {/*
+          Allowed to wrap, and allowed to shrink.
+
+          A grid item will not go narrower than its contents unless it is
+          told it may, so this column held its full width and pushed the
+          page wider than the screen: on a 375px phone the controls alone
+          wanted 268px and the whole site scrolled sideways, taking the
+          fixed blog button off the right edge with it.
+        */}
+        <div className="col-span-3 flex flex-wrap items-center justify-center gap-2 lg:col-span-1 lg:col-start-3 lg:flex-nowrap lg:justify-end lg:gap-3">
           <ContactUs />
 
           <AccountMenu />
