@@ -7,17 +7,13 @@ import ContactUs from "@/components/contact/ContactUs";
 import type { Gender, Market } from "@/types/product";
 
 interface HeaderProps {
-  market: Market;
   gender: Exclude<Gender, "UNISEX">;
-  onMarketChange: (market: Market) => void;
   onGenderChange: (gender: Exclude<Gender, "UNISEX">) => void;
   onMenuOpen: () => void;
 }
 
 export function Header({
-  market,
   gender,
-  onMarketChange,
   onGenderChange,
   onMenuOpen,
 }: HeaderProps) {
@@ -66,31 +62,13 @@ export function Header({
 
           <AccountMenu />
 
-          <div className="flex rounded-full border border-black/15 bg-white p-1">
-            <button
-              type="button"
-              onClick={() => onMarketChange("US")}
-              className={`rounded-full px-3 py-2 text-xs transition md:px-4 md:text-sm ${
-                market === "US"
-                  ? "bg-black text-white"
-                  : "hover:bg-black/5"
-              }`}
-            >
-              US
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onMarketChange("KR")}
-              className={`rounded-full px-3 py-2 text-xs transition md:px-4 md:text-sm ${
-                market === "KR"
-                  ? "bg-black text-white"
-                  : "hover:bg-black/5"
-              }`}
-            >
-              Korea
-            </button>
-          </div>
+          {/*
+            The country lives in the menu now. Two of them already made
+            this the tightest row on the page; three would not fit beside
+            a wordmark and the account controls on a phone, and the menu
+            is where the other scoping controls — brand and category —
+            already are.
+          */}
         </div>
       </div>
 

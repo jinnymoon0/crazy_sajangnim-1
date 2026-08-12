@@ -5,7 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 
+import useSWR from "swr";
+
 import { formatPrice } from "@/lib/utils";
+import {
+  convert,
+  formatMoney,
+  otherCurrencies,
+  type RateTable,
+} from "@/lib/currency";
 import {
   BLOG_SHARE_DRAFT_KEY,
   type BlogShareDraft,
@@ -69,6 +77,28 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
    * Worked out at render, so the link is real markup a tap can follow
    * straight away rather than something JavaScript decides afterwards.
    */
+  /*
+   * One request for the whole grid. SWR keys on the URL, so three
+   * hundred cards asking at once collapse into a single call, and the
+   * answer is held for an hour to match how long the edge keeps it.
+   */
+  const { data: rates } = useSWR<RateTable>(
+    "/api/rates",
+    (url: string) => fetch(url).then((response) => response.json()),
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60 * 60 * 1000,
+    },
+  );
+
+  const converted = otherCurrencies(product.currency)
+    .map((code) => {
+      const value = convert(product.salePrice, product.currency, code, rates);
+
+      return value === null ? null : formatMoney(value, code);
+    })
+    .filter((entry): entry is string => entry !== null);
+
   const shareHref = isSignedIn
     ? "/blog"
     : `/login?callbackUrl=${encodeURIComponent("/blog")}`;
@@ -186,6 +216,26 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
               </span>
             )}
           </div>
+
+          {/*
+            The same price in the other two currencies.
+
+            A Korean shopper looking at a dollar figure, or an American
+            at a won one, cannot tell whether it is a good price without
+            leaving to find out — and the ones who leave do not come
+            back. Both are shown rather than a guess at which is wanted,
+            since the storefront says where the shop is, not where the
+            shopper is.
+
+            Absent until the rates arrive, and absent if they never do.
+            A converted figure is a claim about money; a wrong one is
+            worse than none, so nothing is rendered on a guess.
+          */}
+          {converted.length > 0 && (
+            <p className="mt-1 text-[11px] tabular-nums text-black/45">
+              ≈ {converted.join("  ·  ")}
+            </p>
+          )}
 
           <p className="mt-2 text-[11px] text-black/45">
             Verified from the retailer during the latest catalog refresh

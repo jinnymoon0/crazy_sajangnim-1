@@ -29,12 +29,20 @@ export function formatPrice(
   price: number,
   currency: Currency,
 ): string {
-  return new Intl.NumberFormat(
-    currency === "KRW" ? "ko-KR" : "en-US",
-    {
-      style: "currency",
-      currency,
-      maximumFractionDigits: currency === "KRW" ? 0 : 2,
-    },
-  ).format(price);
+  /*
+   * Won and yen have no minor unit, so a price shown with decimals
+   * reads as a converter's output rather than what the shop charges.
+   * Kept in step with src/lib/currency.ts, which formats the
+   * conversions underneath.
+   */
+  const zeroDecimal = currency === "KRW" || currency === "JPY";
+
+  const locale =
+    currency === "KRW" ? "ko-KR" : currency === "JPY" ? "ja-JP" : "en-US";
+
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    maximumFractionDigits: zeroDecimal ? 0 : 2,
+  }).format(price);
 }
