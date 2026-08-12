@@ -21,10 +21,19 @@ const VISITOR_COOKIE = "cs_visitor";
  * claim any duration it likes, and an analytics table anyone can write
  * arbitrary rows into is not evidence of anything.
  */
+/* Kept beside the storefronts the shop actually serves. */
+const MARKETS = ["US", "KR", "JP"] as const;
+
 const eventSchema = z.object({
   kind: z.enum(["search", "retailer_click"]),
   path: z.string().trim().max(500).nullish(),
-  market: z.enum(["US", "KR"]).nullish(),
+  /*
+   * Every storefront. Written out, this stayed at two after the shop
+   * grew a third, so a visitor browsing Japan had their visit rejected
+   * with a 400 — the analytics quietly stopped counting the newest
+   * storefront rather than failing in a way anyone would see.
+   */
+  market: z.enum(MARKETS).nullish(),
   gender: z.enum(["MEN", "WOMEN", "UNISEX"]).nullish(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
@@ -105,3 +114,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ recorded: false });
   }
 }
+
