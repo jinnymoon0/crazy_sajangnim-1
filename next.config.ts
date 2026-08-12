@@ -3,12 +3,10 @@ import type { NextConfig } from "next";
 /*
  * Headers every response carries.
  *
- * No Content-Security-Policy yet: Next injects inline bootstrap scripts,
- * so a policy strict enough to be worth having needs per-request nonces
- * threaded through the layout, and one loose enough to avoid that
- * (unsafe-inline) offers reassurance rather than protection. Written
- * down so the omission reads as a decision rather than an oversight —
- * see docs/decisions.md.
+ * The Content-Security-Policy is not here. It carries a per-request
+ * nonce, so it cannot be a static header — it is built in src/proxy.ts,
+ * which is where the nonce is generated and handed to Next. These are
+ * the headers that are the same on every response.
  */
 const securityHeaders = [
   /*
