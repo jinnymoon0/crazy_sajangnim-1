@@ -1,3 +1,5 @@
+import type { Currency } from "@/types/product";
+
 export type BlogPost = {
   id: string;
   title: string;
@@ -34,7 +36,7 @@ export type BlogShareDraft = {
   salePrice: number;
   originalPrice: number | null;
   discountPercentage: number | null;
-  currency: "USD" | "KRW";
+  currency: Currency;
   sourceName: string;
   sourceUrl: string;
   imageUrl: string;

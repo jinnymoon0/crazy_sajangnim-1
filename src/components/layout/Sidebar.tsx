@@ -4,6 +4,13 @@ import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { BRANDS, type BrandSlug } from "@/constants/brands";
+
+/* Shown in the shopper's own words rather than the code stored. */
+const MARKETS: { market: Market; label: string }[] = [
+  { market: "US", label: "US" },
+  { market: "KR", label: "Korea" },
+  { market: "JP", label: "Japan" },
+];
 import {
   CATEGORIES,
   type CategorySlug,
@@ -19,6 +26,7 @@ interface SidebarProps {
   onBrandToggle: (brand: BrandSlug) => void;
   onCategoryChange: (category: CategorySlug) => void;
   onClearFilters: () => void;
+  onMarketChange: (market: Market) => void;
 }
 
 export function Sidebar({
@@ -30,6 +38,7 @@ export function Sidebar({
   onBrandToggle,
   onCategoryChange,
   onClearFilters,
+  onMarketChange,
 }: SidebarProps) {
   /*
    * Brands are managed in the admin, so read the live list; the shipped
@@ -104,7 +113,41 @@ export function Sidebar({
           </button>
         </div>
 
+        {/*
+          Country first, because it decides what every other control in
+          here means: a brand filter and a category are both scoped to
+          one storefront, so choosing the shop before the shelf is the
+          order the menu should read in.
+
+          Moved out of the header for room. Two countries already made
+          that the tightest row on the page; three would not fit beside
+          a wordmark and the account controls on a phone.
+        */}
         <section className="border-b border-black/15 pb-8">
+          <h3 className="mb-5 text-xs font-semibold tracking-[0.2em] text-black/50 uppercase">
+            Country
+          </h3>
+
+          <div className="grid grid-cols-3 gap-2">
+            {MARKETS.map((entry) => (
+              <button
+                key={entry.market}
+                type="button"
+                onClick={() => onMarketChange(entry.market)}
+                aria-pressed={market === entry.market}
+                className={`min-h-11 rounded-full border px-3 text-sm font-semibold transition ${
+                  market === entry.market
+                    ? "border-black bg-black text-white"
+                    : "border-black/15 bg-white hover:bg-black/5"
+                }`}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-b border-black/15 py-8">
           <div className="mb-5 flex items-center justify-between">
             <h3 className="text-xs font-semibold tracking-[0.2em] text-black/50 uppercase">
               Brands

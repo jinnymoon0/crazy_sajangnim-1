@@ -15,6 +15,13 @@ import { reportSearch } from "@/lib/analytics/report";
 
 type SelectableGender = Exclude<Gender, "UNISEX">;
 
+/* Reads as a place, not a country code. */
+const STOREFRONT_LABEL: Record<Market, string> = {
+  US: "United States",
+  KR: "Korean",
+  JP: "Japanese",
+};
+
 export default function HomeClient({
   isSignedIn,
 }: {
@@ -210,12 +217,7 @@ export default function HomeClient({
         </span>
       </Link>
       <Header
-        market={market}
         gender={gender}
-        onMarketChange={(nextMarket) => {
-          setMarket(nextMarket);
-          clearFilters();
-        }}
         onGenderChange={(nextGender) => {
           setGender(nextGender);
           clearFilters();
@@ -232,13 +234,18 @@ export default function HomeClient({
         onBrandToggle={toggleBrand}
         onCategoryChange={setSelectedCategory}
         onClearFilters={clearFilters}
+        onMarketChange={(nextMarket) => {
+          setMarket(nextMarket);
+          clearFilters();
+          setSidebarOpen(false);
+        }}
       />
 
       <section className="mx-auto max-w-[1600px] px-4 py-10 md:px-10">
         <div className="mb-9 flex flex-col justify-between gap-5 border-b border-black/10 pb-7 sm:flex-row sm:items-end">
           <div>
             <p className="mb-2 text-xs font-medium tracking-[0.2em] text-black/45 uppercase">
-              {market === "US" ? "United States" : "Korean"}{" "}
+              {STOREFRONT_LABEL[market]}{" "}
               {gender === "MEN" ? "Menswear" : "Womenswear"} Sale
             </p>
 
