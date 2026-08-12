@@ -168,11 +168,46 @@ export default function HomeClient({
 
   return (
     <main className="min-h-screen bg-[#f5f2ea] text-[#111111]">
+      {/*
+        The one route off the grid, so it has to survive whatever it is
+        sitting on: the page scrolls under it and a black pill on a dark
+        product photo disappears. The ring keeps an edge against both the
+        cream page and a dark image, and the dot is the part the eye
+        catches first — it reads as something waiting rather than another
+        piece of furniture.
+      */}
       <Link
         href="/blog"
-        className="fixed bottom-6 right-6 z-50 inline-flex min-h-12 items-center justify-center rounded-full bg-black px-6 py-3 text-sm font-bold !text-white shadow-lg transition hover:bg-neutral-700"
+        aria-label="Open the clothing blog"
+        className="group/blog fixed bottom-6 right-6 z-50 inline-flex min-h-14 items-center justify-center gap-2.5 rounded-full bg-[#111111] px-7 py-4 text-sm font-bold !text-white shadow-xl ring-2 ring-white/80 transition hover:-translate-y-0.5 hover:bg-[#d8432e] hover:shadow-2xl"
       >
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4 shrink-0 transition-transform group-hover/blog:scale-110"
+        >
+          <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-4-.9L3 21l1.9-4.6A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z" />
+        </svg>
+
         Clothing Blog
+
+        {/*
+          Decorative. It is not a count of anything, so it is hidden from
+          screen readers rather than announced as information that does
+          not exist.
+        */}
+        <span
+          aria-hidden="true"
+          className="absolute -right-1 -top-1 flex h-3.5 w-3.5"
+        >
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#d8432e] opacity-70 motion-reduce:hidden" />
+          <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-[#d8432e] ring-2 ring-white" />
+        </span>
       </Link>
       <Header
         market={market}

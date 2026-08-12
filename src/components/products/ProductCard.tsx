@@ -153,11 +153,20 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
 
         <div className="pt-4">
           <div className="flex items-start justify-between gap-3">
-            <p className="text-xs font-semibold tracking-[0.14em]">
+            <p className="min-w-0 text-xs font-semibold tracking-[0.14em]">
               {product.brandName}
             </p>
 
-            <p className="text-right text-[11px] text-black/45">
+            {/*
+              A flex child will not go narrower than its content unless
+              it is allowed to, and a retailer domain has nowhere to
+              break: mohawkgeneralstore.com pushed 126px out of a 164px
+              card on a phone and took the whole page with it, so the
+              site scrolled sideways and the fixed blog button sat off
+              the right edge. Allowed to shrink, and to break mid-word
+              when there is no kinder place.
+            */}
+            <p className="min-w-0 break-words text-right text-[11px] text-black/45">
               {product.sourceName}
             </p>
           </div>
@@ -189,15 +198,37 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
         Signed out it goes to the login page and comes back here; the
         draft is kept either way, so the form is filled in on arrival.
       */}
+      {/*
+        Filled rather than outlined. As a hairline box on a cream card it
+        read as a caption rather than something to press — the one action
+        the card is asking for was the quietest thing on it. Black rather
+        than the accent red, because red already means a discount here
+        and a red button under a red badge says nothing new; the red is
+        kept for the hover, where it is a response rather than a label.
+      */}
       <Link
         href={shareHref}
         prefetch
         onClick={handleShare}
         aria-disabled={isSharing}
-        className={`mt-3 inline-flex min-h-11 w-full touch-manipulation items-center justify-center border border-black/15 px-3 text-xs font-semibold uppercase tracking-[0.08em] transition hover:bg-black hover:text-white ${
-          isSharing ? "bg-black text-white" : ""
+        className={`group/share mt-3 inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 bg-[#111111] px-3 text-xs font-bold uppercase tracking-[0.1em] !text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#d8432e] hover:shadow-md ${
+          isSharing ? "bg-[#d8432e]" : ""
         }`}
       >
+        {/* A speech mark says "write about this" faster than the words do. */}
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-3.5 w-3.5 shrink-0 transition-transform group-hover/share:scale-110"
+        >
+          <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-4-.9L3 21l1.9-4.6A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z" />
+        </svg>
+
         {isSharing ? "Opening blog..." : "Share on blog"}
       </Link>
     </article>
