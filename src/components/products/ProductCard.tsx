@@ -86,8 +86,22 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
     "/api/rates",
     (url: string) => fetch(url).then((response) => response.json()),
     {
-      revalidateOnFocus: false,
-      dedupingInterval: 60 * 60 * 1000,
+      /*
+       * The same cadence as the catalogue in use-products, so the rate
+       * is refreshed by whatever refreshed the prices: every five
+       * minutes on a visible tab, on returning to it, and on
+       * reconnecting. A price and the conversion under it should never
+       * be from different moments.
+       *
+       * Deduping well inside that window, because three hundred cards
+       * ask this question at once and only one of them needs to.
+       */
+      refreshInterval: 5 * 60 * 1000,
+      refreshWhenHidden: false,
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      dedupingInterval: 30 * 1000,
+      keepPreviousData: true,
     },
   );
 

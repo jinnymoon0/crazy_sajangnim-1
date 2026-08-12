@@ -34,7 +34,13 @@ interface Rates {
 let cached: Rates | null = null;
 let cachedAt = 0;
 
-const MAX_AGE_MS = 60 * 60 * 1000;
+/*
+ * Five minutes, matching how long a catalogue response is held. The
+ * prices and the rate that converts them now go stale together — an
+ * hour-old rate under a five-minute-old price is a mismatch nobody can
+ * see and everybody would have to trust.
+ */
+const MAX_AGE_MS = 5 * 60 * 1000;
 
 export async function GET() {
   const fresh = cached && Date.now() - cachedAt < MAX_AGE_MS;
@@ -95,11 +101,12 @@ export async function GET() {
   return NextResponse.json(cached, {
     headers: {
       /*
-       * An hour at the edge, a day of serving the old one while it
-       * refreshes. Rates move far more slowly than the page is loaded,
-       * and every card on the page asks the same question.
+       * The same five minutes the catalogue gets, so a refetch actually
+       * returns a new rate rather than the edge handing back the one it
+       * was already holding. The long stale window is what keeps the
+       * conversions on the page when the source has a bad morning.
        */
-      "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+      "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
     },
   });
 }
