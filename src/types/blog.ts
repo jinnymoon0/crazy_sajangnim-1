@@ -1,4 +1,23 @@
-import type { Currency } from "@/types/product";
+import type { Currency, Market } from "@/types/product";
+
+/*
+ * The item a post is about, copied onto the post rather than looked up.
+ *
+ * A sale listing leaves the catalogue within weeks and the conversation
+ * outlives it, so a post that pointed at a row instead of carrying its
+ * own copy would turn into a blank card the moment the sale ended.
+ */
+export type PostProduct = {
+  id: string;
+  url: string;
+  brand: string;
+  name: string;
+  imageUrl: string;
+  market: Market;
+  currency: Currency;
+  salePrice: number | null;
+  originalPrice: number | null;
+};
 
 export type BlogPost = {
   id: string;
@@ -11,6 +30,8 @@ export type BlogPost = {
   image_urls: string[];
   image_paths: string[];
   created_at: string;
+  /* Null for a post written from the blog rather than from an item. */
+  product: PostProduct | null;
 };
 
 export type BlogComment = {
@@ -31,6 +52,12 @@ export type BlogComment = {
 export const BLOG_SHARE_DRAFT_KEY = "blog-share-draft";
 
 export type BlogShareDraft = {
+  /*
+   * Which item this is, so the post can be filed against it and the
+   * next person arriving from the same product finds this one.
+   */
+  productId: string;
+  market: Market;
   brandName: string;
   productName: string;
   salePrice: number;

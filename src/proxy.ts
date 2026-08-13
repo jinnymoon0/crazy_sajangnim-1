@@ -14,7 +14,24 @@ import { auth } from "@/auth";
  * post, or pressing "Share on blog", lands where it was going once they
  * have signed in.
  */
+/*
+ * How many people have posted about each item, which the shop shows on
+ * every card to anyone at all.
+ *
+ * Open on purpose, and the one thing below /api/blog that is. It
+ * answers with product ids and integers — no titles, no authors, no
+ * post contents — and the whole point of it is to reach the visitor who
+ * has not signed in and does not yet know there is anybody here.
+ * Requiring an account to be told a conversation exists would hide the
+ * community from exactly the person it needs to reach.
+ */
+const OPEN_BLOG_PATHS = new Set(["/api/blog/product-counts"]);
+
 function needsAccount(pathname: string): boolean {
+  if (OPEN_BLOG_PATHS.has(pathname)) {
+    return false;
+  }
+
   return (
     /* "/blog" itself stays open; anything below it does not. */
     /^\/blog\/.+/.test(pathname) ||
@@ -95,7 +112,23 @@ function policy(nonce: string): string {
      */
     "form-action 'self'",
 
-    "upgrade-insecure-requests",
+    /*
+     * Production only, because on http://localhost it does the one thing
+     * it exists to prevent: breaking the page.
+     *
+     * Safari applies this to a page served over http, so every
+     * stylesheet, script and image the dev server offers is re-requested
+     * over https — where nothing is listening. The page arrives with no
+     * CSS at all, as raw serif text with blue underlined links, and no
+     * error says why. Chrome exempts localhost from the upgrade, so the
+     * same commit renders perfectly in one browser and not the other.
+     *
+     * Nothing is lost by leaving it out here. It upgrades insecure
+     * subresource requests, and in development the page itself is the
+     * insecure one; in production everything is already https and the
+     * directive stays exactly as it was.
+     */
+    ...(isDev ? [] : ["upgrade-insecure-requests"]),
   ].join("; ");
 }
 

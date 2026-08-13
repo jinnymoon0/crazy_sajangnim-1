@@ -113,9 +113,44 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
     })
     .filter((entry): entry is string => entry !== null);
 
+  /*
+   * How many people have already written about this item. One request
+   * for the whole grid, the same way the rates are fetched.
+   *
+   * This is the shop admitting the community exists. Without it the
+   * button asks for a favour — write something, for nobody in
+   * particular — and an item a dozen people are discussing looks
+   * exactly like one nobody has ever mentioned.
+   */
+  const { data: postCounts } = useSWR<{ counts: Record<string, number> }>(
+    "/api/blog/product-counts",
+    (url: string) => fetch(url).then((response) => response.json()),
+    {
+      refreshInterval: 5 * 60 * 1000,
+      refreshWhenHidden: false,
+      revalidateOnFocus: true,
+      dedupingInterval: 30 * 1000,
+      keepPreviousData: true,
+    },
+  );
+
+  const postCount = postCounts?.counts?.[product.id] ?? 0;
+
+  /*
+   * The item travels in the address, not only in session storage.
+   *
+   * The draft below is what fills the compose box, and it is deliberately
+   * one-shot — the form clears it so a later visit does not reopen a post
+   * about an item the reader has moved on from. But the blog page also has
+   * to know which item to gather the conversation around, and that has to
+   * survive a reload, a sign-in round trip, and a link sent to a friend.
+   * Storage cannot do any of the three.
+   */
+  const blogHref = `/blog?product=${encodeURIComponent(product.id)}`;
+
   const shareHref = isSignedIn
-    ? "/blog"
-    : `/login?callbackUrl=${encodeURIComponent("/blog")}`;
+    ? blogHref
+    : `/login?callbackUrl=${encodeURIComponent(blogHref)}`;
 
   function handleShare() {
     if (isSignedIn) {
@@ -126,6 +161,8 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
     }
 
     const draft: BlogShareDraft = {
+      productId: product.id,
+      market: product.market,
       brandName: product.brandName,
       productName: product.productName,
       salePrice: product.salePrice,
@@ -293,7 +330,11 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
           <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-4-.9L3 21l1.9-4.6A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z" />
         </svg>
 
-        {isSharing ? "Opening blog..." : "Share on blog"}
+        {isSharing
+          ? "Opening..."
+          : postCount > 0
+            ? `Join ${postCount} ${postCount === 1 ? "person" : "people"} on this`
+            : "Share on blog"}
       </Link>
     </article>
   );

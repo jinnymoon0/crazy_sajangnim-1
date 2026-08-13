@@ -1,10 +1,23 @@
-import Link from "next/link";
+"use client";
 
+import Link from "next/link";
+import { useEffect, useState } from "react";
+
+import {
+  countByLanguage,
+  LANGUAGE_LABELS,
+  LANGUAGE_STORAGE_KEY,
+  type LanguageFilter,
+  postLanguage,
+} from "@/lib/blog/language";
 import type { BlogPost } from "@/types/blog";
 
 type BlogFeedProps = {
   posts: BlogPost[];
   engagement?: Record<string, { likes: number; comments: number }>;
+  /** Overridden when the feed is one item's conversation, not the blog. */
+  heading?: string;
+  emptyMessage?: string;
 };
 
 function formatPostDate(dateValue: string): string {
@@ -103,7 +116,114 @@ function PostImages({
   );
 }
 
-export default function BlogFeed({ posts, engagement }: BlogFeedProps) {
+export default function BlogFeed({
+  posts,
+  engagement,
+  heading,
+  emptyMessage,
+}: BlogFeedProps) {
+  /*
+   * Everything, until the browser has been asked what it reads.
+   *
+   * Choosing a language during render would mean the server picking one
+   * and the browser disagreeing, which React reports as a hydration
+   * error. Starting on "all" is also the honest default for the moment
+   * before anything is known about the reader — no post is hidden from
+   * anyone who has not been offered the choice yet.
+   */
+  const [language, setLanguage] = useState<LanguageFilter>("all");
+
+  /* Deferred a tick: the strict effect lint rejects a state update started
+   * synchronously in an effect, as in BlogPostForm. */
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      let stored: string | null = null;
+
+      try {
+        stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+      } catch {
+        stored = null;
+      }
+
+      if (stored === "all" || stored === "en" || stored === "ko") {
+        setLanguage(stored);
+
+        return;
+      }
+
+      /*
+       * Nobody has chosen yet, so start from what the browser says its
+       * owner reads. Half the feed being in a script the reader cannot
+       * read at all is worse than a filter they can switch off in one
+       * click, and the counts beside each option say plainly what is
+       * being hidden.
+       */
+      setLanguage(
+        navigator.language.toLowerCase().startsWith("ko") ? "ko" : "en",
+      );
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  function chooseLanguage(next: LanguageFilter) {
+    setLanguage(next);
+
+    try {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
+    } catch {
+      /* Private browsing. The choice simply does not outlive the visit. */
+    }
+  }
+
+  const counts = countByLanguage(posts);
+
+  const visible =
+    language === "all"
+      ? posts
+      : posts.filter((post) => postLanguage(post) === language);
+
+  /*
+   * Offered only when there is a mix. A blog written entirely in one
+   * language does not need a control that can only ever empty it.
+   */
+  const languages: LanguageFilter[] =
+    counts.en > 0 && counts.ko > 0 ? ["all", "en", "ko"] : [];
+
+  const filter =
+    languages.length === 0 ? null : (
+      <div className="flex flex-wrap items-center gap-2">
+        {languages.map((option) => {
+          const total = option === "all" ? posts.length : counts[option];
+
+          return (
+            <button
+              key={option}
+              type="button"
+              onClick={() => chooseLanguage(option)}
+              aria-pressed={language === option}
+              className={`min-h-9 rounded-full px-3.5 py-1.5 text-sm font-bold transition ${
+                language === option
+                  ? "bg-neutral-950 text-white"
+                  : "border border-black/10 bg-white text-neutral-600 hover:border-neutral-950 hover:text-neutral-950"
+              }`}
+            >
+              {LANGUAGE_LABELS[option]}
+              <span
+                className={
+                  language === option
+                    ? "ml-1.5 text-white/60"
+                    : "ml-1.5 text-neutral-400"
+                }
+              >
+                {total}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    );
+
   if (posts.length === 0) {
     return (
       <section className="rounded-3xl border border-dashed border-neutral-300 bg-white px-6 py-16 text-center">
@@ -112,7 +232,7 @@ export default function BlogFeed({ posts, engagement }: BlogFeedProps) {
         </h2>
 
         <p className="mt-2 text-sm text-neutral-600">
-          Be the first person to share a clothing item.
+          {emptyMessage ?? "Be the first person to share a clothing item."}
         </p>
       </section>
     );
@@ -120,24 +240,48 @@ export default function BlogFeed({ posts, engagement }: BlogFeedProps) {
 
   return (
     <section>
-      <div className="mb-5 flex items-end justify-between gap-4">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-neutral-500">
-            Latest posts
+            {heading ?? "Latest posts"}
           </p>
 
           <h2 className="mt-2 text-2xl font-bold text-neutral-950">
-            Community clothing feed
+            {heading ? "What people said" : "Community clothing feed"}
           </h2>
         </div>
 
-        <p className="text-sm text-neutral-500">
-          {posts.length} {posts.length === 1 ? "post" : "posts"}
-        </p>
+        <div className="flex flex-wrap items-center gap-4">
+          {filter}
+
+          <p className="text-sm text-neutral-500">
+            {visible.length} {visible.length === 1 ? "post" : "posts"}
+          </p>
+        </div>
       </div>
 
+      {/*
+        * Every post in the feed is in the other language. Saying so beats
+        * an empty panel that looks like a fault.
+        */}
+      {visible.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-neutral-300 bg-white px-6 py-12 text-center">
+          <p className="text-sm text-neutral-600">
+            Nothing here in {LANGUAGE_LABELS[language]} yet.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => chooseLanguage("all")}
+            className="mt-4 min-h-11 rounded-xl bg-neutral-950 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-neutral-700"
+          >
+            Show every language
+          </button>
+        </div>
+      ) : null}
+
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-        {posts.map((post) => {
+        {visible.map((post) => {
           const imageUrls =
             post.image_urls?.length > 0
               ? post.image_urls

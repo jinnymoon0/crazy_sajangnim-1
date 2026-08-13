@@ -11,11 +11,9 @@ import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 
 import { compressImageForUpload } from "@/lib/images/compress-image";
-import { formatPrice } from "@/lib/utils";
-import {
-  BLOG_SHARE_DRAFT_KEY,
-  type BlogShareDraft,
-} from "@/types/blog";
+import { readShareDraft } from "@/lib/blog/share-draft";
+
+import type { PostProduct } from "@/types/blog";
 
 const MAX_IMAGE_COUNT = 5;
 const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
@@ -62,9 +60,20 @@ type SubmissionStatus =
 interface BlogPostFormProps {
   /** The signed-in account's username — posts are published under it. */
   username: string;
+  /*
+   * The item being discussed, when the blog was opened from one. The
+   * post is filed against it so the next person arriving from the same
+   * product finds this one waiting.
+   */
+  productId?: string;
+  product?: PostProduct | null;
 }
 
-export default function BlogPostForm({ username }: BlogPostFormProps) {
+export default function BlogPostForm({
+  username,
+  productId,
+  product,
+}: BlogPostFormProps) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,6 +81,14 @@ export default function BlogPostForm({ username }: BlogPostFormProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [sharedImageUrl, setSharedImageUrl] = useState<string | null>(null);
+  /*
+   * Known from the server when others have already posted about this
+   * item; otherwise it arrives with the draft, which is the case for
+   * whoever posts about it first.
+   */
+  const [sharedProduct, setSharedProduct] = useState<PostProduct | null>(
+    product ?? null,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [status, setStatus] = useState<SubmissionStatus>({
@@ -86,22 +103,9 @@ export default function BlogPostForm({ username }: BlogPostFormProps) {
    */
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      let draft: BlogShareDraft;
+      const draft = readShareDraft(productId);
 
-      try {
-        const raw = sessionStorage.getItem(BLOG_SHARE_DRAFT_KEY);
-
-        if (!raw) {
-          return;
-        }
-
-        sessionStorage.removeItem(BLOG_SHARE_DRAFT_KEY);
-        draft = JSON.parse(raw) as BlogShareDraft;
-      } catch {
-        return;
-      }
-
-      if (!draft?.productName || !draft?.brandName) {
+      if (!draft) {
         return;
       }
 
@@ -125,38 +129,38 @@ export default function BlogPostForm({ username }: BlogPostFormProps) {
         ).slice(0, 120);
       }
 
+      /*
+       * The brand, price, shop and link used to be typed into the body
+       * here. They are now carried by the post itself and drawn as a
+       * card above this form and beside the post wherever it appears,
+       * so writing them out again produced a post that said the same
+       * thing twice and buried whatever the person actually wanted to
+       * say under a specification sheet.
+       */
       if (contentInput && !contentInput.value) {
-        const priceLine = draft.originalPrice
-          ? `${formatPrice(draft.salePrice, draft.currency)} (was ${formatPrice(
-              draft.originalPrice,
-              draft.currency,
-            )}${
-              draft.discountPercentage
-                ? `, ${draft.discountPercentage}% off`
-                : ""
-            })`
-          : formatPrice(draft.salePrice, draft.currency);
-
-        contentInput.value = [
-          "Found this on sale!",
-          "",
-          `Brand: ${draft.brandName}`,
-          `Item: ${draft.productName}`,
-          `Price: ${priceLine}`,
-          `From: ${draft.sourceName}`,
-          `Link: ${draft.sourceUrl}`,
-        ]
-          .join("\n")
-          .slice(0, 5000);
+        contentInput.value = "Found this on sale!";
       }
 
       if (draft.imageUrl && /^https:\/\//i.test(draft.imageUrl)) {
         setSharedImageUrl(draft.imageUrl);
       }
+
+      setSharedProduct((known) => known ?? {
+        id: draft.productId,
+        url: draft.sourceUrl,
+        brand: draft.brandName,
+        name: draft.productName,
+        imageUrl: draft.imageUrl,
+        market: draft.market,
+        currency: draft.currency,
+        salePrice: draft.salePrice,
+        originalPrice: draft.originalPrice,
+      });
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, []);
+    /* Re-runs if the reader moves to another item without a full page load. */
+  }, [productId]);
 
   function clearPreviewUrls() {
     previewUrls.forEach((url) => URL.revokeObjectURL(url));
@@ -305,6 +309,15 @@ export default function BlogPostForm({ username }: BlogPostFormProps) {
 
       if (sharedImageUrl) {
         formData.append("sharedImageUrls", sharedImageUrl);
+      }
+
+      /*
+       * What this post is about, so it can be found from the item as
+       * well as from the feed. Verified again on the server — this is a
+       * form field and a form field is whatever the sender says it is.
+       */
+      if (sharedProduct) {
+        formData.append("product", JSON.stringify(sharedProduct));
       }
 
       const response = await fetch("/api/blog", {
