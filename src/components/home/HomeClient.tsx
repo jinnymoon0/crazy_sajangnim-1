@@ -177,12 +177,26 @@ export default function HomeClient({
   return (
     <main className="min-h-screen bg-[#f5f2ea] text-[#111111]">
       {/*
-        Above the header rather than inside it, and deliberately not
-        sticky: it is an introduction, not a control. It says its piece
-        while the first screen is being read and then gets out of the
-        way, leaving the floating button below as the standing route in.
+        The banner and the header travel as one pinned block, so what
+        this site is stays on screen for the whole scroll rather than
+        being a claim made once at the top and then gone.
+
+        z-30, not higher: the sidebar's backdrop is z-40 and has to be
+        able to dim this the way it already dimmed the header, and the
+        floating blog button at z-50 stays above both.
       */}
-      <CommunityBanner />
+      <div className="sticky top-0 z-30">
+        <CommunityBanner />
+
+        <Header
+          gender={gender}
+          onGenderChange={(nextGender) => {
+            setGender(nextGender);
+            clearFilters();
+          }}
+          onMenuOpen={() => setSidebarOpen(true)}
+        />
+      </div>
 
       {/*
         The one route off the grid, so it has to survive whatever it is
@@ -191,6 +205,11 @@ export default function HomeClient({
         cream page and a dark image, and the dot is the part the eye
         catches first — it reads as something waiting rather than another
         piece of furniture.
+
+        Deliberately outside the sticky block above. A fixed element
+        nested in it would be stacked inside that block's z-30 context,
+        which puts this button under the sidebar rather than over it —
+        the one thing its z-50 exists to prevent.
       */}
       <Link
         href="/blog"
@@ -225,14 +244,6 @@ export default function HomeClient({
           <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-[#d8432e] ring-2 ring-white" />
         </span>
       </Link>
-      <Header
-        gender={gender}
-        onGenderChange={(nextGender) => {
-          setGender(nextGender);
-          clearFilters();
-        }}
-        onMenuOpen={() => setSidebarOpen(true)}
-      />
 
       <Sidebar
         open={sidebarOpen}
