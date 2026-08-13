@@ -27,9 +27,32 @@ import { auth } from "@/auth";
  */
 const OPEN_BLOG_PATHS = new Set(["/api/blog/product-counts"]);
 
-function needsAccount(pathname: string): boolean {
+function needsAccount(pathname: string, params: URLSearchParams): boolean {
   if (OPEN_BLOG_PATHS.has(pathname)) {
     return false;
+  }
+
+  /*
+   * An item's conversation is the thing people send each other.
+   *
+   * "/blog?product=..." is what the share button produces and what ends
+   * up pasted into a message, so it is the page a stranger is most
+   * likely to arrive on first. Asking for an account there turns a link
+   * between two friends into the way the second one joins — which is
+   * the whole point of a shop you use with other people.
+   *
+   * The address survives it: the redirect below carries the full path
+   * and query into callbackUrl, so signing in lands on the same item
+   * rather than on the front page, and the shared link keeps working
+   * for whoever it is passed to next.
+   *
+   * The blog's own front page stays open. Someone browsing for its own
+   * sake should still see what is written here before being asked for
+   * anything; it is the specific item, arrived at from outside, that is
+   * worth an account.
+   */
+  if (pathname === "/blog" && params.has("product")) {
+    return true;
   }
 
   return (
@@ -133,11 +156,11 @@ function policy(nonce: string): string {
 }
 
 export const proxy = auth((request: NextRequest & { auth?: unknown }) => {
-  const { pathname, search } = request.nextUrl;
+  const { pathname, search, searchParams } = request.nextUrl;
 
   const session = (request as { auth?: { user?: unknown } }).auth;
 
-  if (needsAccount(pathname) && !session?.user) {
+  if (needsAccount(pathname, searchParams) && !session?.user) {
     /*
      * The blog's own API answers in JSON, and its callers handle a
      * refusal. Handing them a login page would be parsed as nonsense —
