@@ -10,6 +10,7 @@ import {
   type LanguageFilter,
   postLanguage,
 } from "@/lib/blog/language";
+import { shortenUrls } from "@/components/blog/PostText";
 import type { BlogPost } from "@/types/blog";
 
 type BlogFeedProps = {
@@ -319,7 +320,7 @@ export default function BlogFeed({
                   </h3>
 
                   <p className="mt-3 line-clamp-3 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-600">
-                    {post.content}
+                    {shortenUrls(post.content)}
                   </p>
 
                   <div className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold text-neutral-500">

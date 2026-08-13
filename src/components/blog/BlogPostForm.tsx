@@ -130,15 +130,21 @@ export default function BlogPostForm({
       }
 
       /*
-       * The brand, price, shop and link used to be typed into the body
-       * here. They are now carried by the post itself and drawn as a
-       * card above this form and beside the post wherever it appears,
-       * so writing them out again produced a post that said the same
-       * thing twice and buried whatever the person actually wanted to
-       * say under a specification sheet.
+       * The box opens empty, with the item's address two lines down.
+       *
+       * It used to open with "Found this on sale!" already written,
+       * which is the site talking rather than the person: it reads as
+       * the whole post, so the easiest thing to do was publish it
+       * unchanged and say nothing. An empty first line asks for what
+       * they actually think, and the blank line keeps the link from
+       * sitting against their sentence as they type.
+       *
+       * The cursor goes to the top so typing begins above the link
+       * rather than after it.
        */
-      if (contentInput && !contentInput.value) {
-        contentInput.value = "Found this on sale!";
+      if (contentInput && !contentInput.value && draft.sourceUrl) {
+        contentInput.value = `\n\n${draft.sourceUrl}`;
+        contentInput.setSelectionRange(0, 0);
       }
 
       if (draft.imageUrl && /^https:\/\//i.test(draft.imageUrl)) {

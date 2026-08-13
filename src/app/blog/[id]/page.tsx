@@ -7,6 +7,7 @@ import BlogImageGallery from "@/components/blog/BlogImageGallery";
 import BlogLikeButton from "@/components/blog/BlogLikeButton";
 import BlogPostManagement from "@/components/blog/BlogPostManagement";
 import PostProductCard from "@/components/blog/PostProductCard";
+import PostText from "@/components/blog/PostText";
 import { requireOnboardedUser } from "@/lib/auth/session";
 import { displayName, isAuthor } from "@/lib/blog/authorship";
 import { isViewerSuperAdmin } from "@/lib/blog/moderation";
@@ -219,7 +220,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 </h2>
 
                 <p className="mt-4 whitespace-pre-wrap break-words text-base leading-8 text-neutral-700">
-                  {post.content}
+                  <PostText>{post.content}</PostText>
                 </p>
               </div>
 
