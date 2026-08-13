@@ -17,8 +17,15 @@ export function Header({
   onGenderChange,
   onMenuOpen,
 }: HeaderProps) {
+  /*
+   * Stickiness lives on the wrapper in HomeClient, which holds the
+   * banner and this header together. Two separately sticky elements
+   * both pinned to top-0 land on top of each other; as one box they
+   * travel together and the banner cannot be scrolled out from under
+   * the header.
+   */
   return (
-    <header className="sticky top-0 z-30 border-b border-black/10 bg-[#f5f2ea]/95 backdrop-blur">
+    <header className="border-b border-black/10 bg-[#f5f2ea]/95 backdrop-blur">
       {/*
         Two rows until lg, one above it.
 

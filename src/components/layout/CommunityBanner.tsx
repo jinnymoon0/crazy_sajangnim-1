@@ -59,7 +59,16 @@ export default function CommunityBanner() {
           <span className="relative inline-flex h-2 w-2 rounded-full bg-[#d8432e] group-hover/banner:bg-white" />
         </span>
 
-        <span className="text-xs font-bold uppercase tracking-[0.14em] sm:text-sm">
+        {/*
+          Shorter on a phone so the bar stays one line. Pinned to the top
+          for the whole scroll, a second line is a quarter of a small
+          screen spent saying the same thing at more length.
+        */}
+        <span className="text-[11px] font-bold uppercase tracking-[0.1em] sm:hidden">
+          Shop with friends
+        </span>
+
+        <span className="hidden text-xs font-bold uppercase tracking-[0.14em] sm:inline sm:text-sm">
           Shop with your friends, not alone
         </span>
 
@@ -75,8 +84,10 @@ export default function CommunityBanner() {
           {evidence}
         </span>
 
-        <span className="text-xs font-bold underline underline-offset-4 sm:text-sm">
-          See what people are saying
+        <span className="text-[11px] font-bold underline underline-offset-4 sm:text-sm">
+          {/* The invitation shortens with the claim, and keeps the arrow. */}
+          <span className="sm:hidden">See what people say</span>
+          <span className="hidden sm:inline">See what people are saying</span>
           <span aria-hidden="true"> →</span>
         </span>
       </div>
