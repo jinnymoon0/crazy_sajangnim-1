@@ -1,9 +1,15 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useState } from "react";
+import useSWR from "swr";
 
 import { BRANDS, type BrandSlug } from "@/constants/brands";
+
+interface BrandOption {
+  slug: string;
+  englishName: string;
+  koreanName: string | null;
+}
 
 /* Shown in the shopper's own words rather than the code stored. */
 const MARKETS: { market: Market; label: string }[] = [
@@ -44,43 +50,41 @@ export function Sidebar({
    * Brands are managed in the admin, so read the live list; the shipped
    * constant is the fallback while it loads or if the request fails.
    */
-  const [brands, setBrands] = useState<
-    { slug: string; englishName: string; koreanName: string | null }[]
-  >(() =>
-    BRANDS.map((brand) => ({
-      slug: brand.slug,
-      englishName: brand.englishName,
-      koreanName: brand.koreanName,
-    })),
+  /*
+   * Re-read on the same schedule as the catalogue.
+   *
+   * Fetched once on mount, a brand added in the admin was invisible to
+   * anyone already on the page — the grid picked up its products five
+   * minutes later while the filter that finds them stayed missing until
+   * a reload. The list and the products it filters should never be from
+   * different moments.
+   */
+  const { data } = useSWR<{ brands?: BrandOption[] }>(
+    "/api/catalog/brands",
+    (url: string) => fetch(url).then((response) => response.json()),
+    {
+      refreshInterval: 5 * 60 * 1000,
+      refreshWhenHidden: false,
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      dedupingInterval: 30 * 1000,
+      keepPreviousData: true,
+    },
   );
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const timer = window.setTimeout(async () => {
-      try {
-        const response = await fetch("/api/catalog/brands");
-        const body = (await response.json()) as {
-          brands?: {
-            slug: string;
-            englishName: string;
-            koreanName: string | null;
-          }[];
-        };
-
-        if (!cancelled && body.brands?.length) {
-          setBrands(body.brands);
-        }
-      } catch {
-        // Keep the shipped list.
-      }
-    }, 0);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, []);
+  /*
+   * The shipped constant stands in until the first answer arrives, and
+   * stays if the request fails — a menu with no brands in it looks like
+   * the shop has none.
+   */
+  const brands: BrandOption[] =
+    data?.brands?.length
+      ? data.brands
+      : BRANDS.map((brand) => ({
+          slug: brand.slug,
+          englishName: brand.englishName,
+          koreanName: brand.koreanName,
+        }));
 
   return (
     <>
