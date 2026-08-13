@@ -1,10 +1,37 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getAuthState } from "@/lib/auth/session";
+import {
+  productIdFromCallback,
+  productLinkMetadata,
+} from "@/lib/blog/product-metadata";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 
 export const dynamic = "force-dynamic";
+
+/*
+ * When this page is standing in front of an item, it wears the item's
+ * card rather than its own.
+ *
+ * An unfurler that does not identify itself is sent here by the same
+ * redirect a person gets, and then asks this page what the link is
+ * about. Answering "Sign in" turns a friend's message about a jacket
+ * into a preview of a login form — the least clickable thing it could
+ * possibly say about the item behind it.
+ */
+export async function generateMetadata({
+  searchParams,
+}: LoginPageProps): Promise<Metadata> {
+  const productId = productIdFromCallback((await searchParams).callbackUrl);
+
+  if (!productId) {
+    return {};
+  }
+
+  return (await productLinkMetadata(productId)) ?? {};
+}
 
 type LoginPageProps = {
   searchParams: Promise<{
