@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import CommunityBanner from "@/components/layout/CommunityBanner";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ProductGrid } from "@/components/products/ProductGrid";
@@ -175,6 +176,14 @@ export default function HomeClient({
 
   return (
     <main className="min-h-screen bg-[#f5f2ea] text-[#111111]">
+      {/*
+        Above the header rather than inside it, and deliberately not
+        sticky: it is an introduction, not a control. It says its piece
+        while the first screen is being read and then gets out of the
+        way, leaving the floating button below as the standing route in.
+      */}
+      <CommunityBanner />
+
       {/*
         The one route off the grid, so it has to survive whatever it is
         sitting on: the page scrolls under it and a black pill on a dark
