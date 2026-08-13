@@ -27,6 +27,27 @@ import { auth } from "@/auth";
  */
 const OPEN_BLOG_PATHS = new Set(["/api/blog/product-counts"]);
 
+/*
+ * The programs that draw the preview card when a link is pasted into a
+ * chat. None of them can sign in, so behind the gate they see the login
+ * page and describe a friend's message about a jacket as "Sign in".
+ *
+ * They are let through to one address only — an item's conversation —
+ * and only to read it. A person claiming to be Slackbot therefore gets
+ * a product and some post titles, which is what this page showed
+ * everybody until today; the account is still required to open a post,
+ * comment, or write anything. That is the trade: a preview worth
+ * clicking, against a page that is already the shop's own shop window.
+ */
+const LINK_PREVIEW_AGENT =
+  /facebookexternalhit|facebot|twitterbot|slackbot|slack-imgproxy|whatsapp|telegrambot|discordbot|linkedinbot|skypeuripreview|kakaotalk|kakaostory|daumoa|line-podcast|redditbot|applebot|googlebot|bingbot|embedly|iframely|pinterest|vkshare|snapchat|nuzzel|outbrain|quora link preview|showyoubot|whatsapp|yandex/i;
+
+function isLinkPreview(request: NextRequest): boolean {
+  const agent = request.headers.get("user-agent");
+
+  return agent ? LINK_PREVIEW_AGENT.test(agent) : false;
+}
+
 function needsAccount(pathname: string, params: URLSearchParams): boolean {
   if (OPEN_BLOG_PATHS.has(pathname)) {
     return false;
@@ -160,7 +181,20 @@ export const proxy = auth((request: NextRequest & { auth?: unknown }) => {
 
   const session = (request as { auth?: { user?: unknown } }).auth;
 
-  if (needsAccount(pathname, searchParams) && !session?.user) {
+  /*
+   * An unfurler reading the item it was asked about. Narrow on purpose:
+   * this one address, never a post, never the API. A card describing
+   * the product is the entire reason the link gets opened at all.
+   *
+   * Written as an exemption to the gate rather than an early return, so
+   * the request still collects the nonce and policy below. Returning
+   * here would have handed anyone sending this User-Agent a page with
+   * no Content-Security-Policy on it.
+   */
+  const isPreviewOfItem =
+    pathname === "/blog" && searchParams.has("product") && isLinkPreview(request);
+
+  if (needsAccount(pathname, searchParams) && !session?.user && !isPreviewOfItem) {
     /*
      * The blog's own API answers in JSON, and its callers handle a
      * refusal. Handing them a login page would be parsed as nonsense —

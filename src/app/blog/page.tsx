@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import AccountMenu from "@/components/auth/AccountMenu";
@@ -16,9 +17,28 @@ import {
 import { getSessionUser } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import ProductConversationHeader from "@/components/blog/ProductConversationHeader";
+import { productLinkMetadata } from "@/lib/blog/product-metadata";
 import type { BlogPost } from "@/types/blog";
 
 export const dynamic = "force-dynamic";
+
+/*
+ * The card a chat app draws for this link. Only when the address names
+ * an item — the blog's own front page keeps the site-wide metadata.
+ */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ product?: string }>;
+}): Promise<Metadata> {
+  const productId = (await searchParams).product?.trim();
+
+  if (!productId) {
+    return {};
+  }
+
+  return (await productLinkMetadata(productId)) ?? {};
+}
 
 /*
  * `productId` narrows this to the conversation about one item, which is
