@@ -6,11 +6,19 @@ import BlogComments from "@/components/blog/BlogComments";
 import BlogImageGallery from "@/components/blog/BlogImageGallery";
 import BlogLikeButton from "@/components/blog/BlogLikeButton";
 import BlogPostManagement from "@/components/blog/BlogPostManagement";
+import PostProductCard from "@/components/blog/PostProductCard";
 import { requireOnboardedUser } from "@/lib/auth/session";
 import { displayName, isAuthor } from "@/lib/blog/authorship";
 import { isViewerSuperAdmin } from "@/lib/blog/moderation";
 import { getCurrentUsernames } from "@/lib/blog/current-names";
 import { getPostEngagement } from "@/lib/blog/engagement";
+import {
+  BLOG_POST_COLUMNS,
+  BLOG_POST_COLUMNS_WITHOUT_PRODUCT,
+  type BlogPostRow,
+  isMissingProductColumn,
+  toBlogPost,
+} from "@/lib/blog/posts";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { BlogComment, BlogPost } from "@/types/blog";
 
@@ -20,19 +28,6 @@ type BlogPostPageProps = {
   params: Promise<{
     id: string;
   }>;
-};
-
-type BlogPostRow = {
-  id: string;
-  title: string;
-  content: string;
-  author_name: string;
-  user_id: string | null;
-  image_url: string | null;
-  image_path: string | null;
-  image_urls: string[] | null;
-  image_paths: string[] | null;
-  created_at: string;
 };
 
 function formatPostDate(dateValue: string): string {
@@ -48,13 +43,15 @@ function formatPostDate(dateValue: string): string {
 async function getBlogPost(id: string): Promise<BlogPost | null> {
   const supabase = getSupabaseAdmin();
 
-  const { data, error } = await supabase
-    .from("blog_posts")
-    .select(
-      "id, title, content, author_name, user_id, image_url, image_path, image_urls, image_paths, created_at",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const read = (columns: string) =>
+    supabase.from("blog_posts").select(columns).eq("id", id).maybeSingle();
+
+  let { data, error } = await read(BLOG_POST_COLUMNS);
+
+  /* The post is worth showing even where the item columns are not there yet. */
+  if (isMissingProductColumn(error)) {
+    ({ data, error } = await read(BLOG_POST_COLUMNS_WITHOUT_PRODUCT));
+  }
 
   if (error) {
     console.error("Failed to load blog post:", {
@@ -71,25 +68,7 @@ async function getBlogPost(id: string): Promise<BlogPost | null> {
     return null;
   }
 
-  const row = data as BlogPostRow;
-
-  return {
-    ...row,
-    image_url: row.image_url ?? "",
-    image_path: row.image_path ?? "",
-    image_urls:
-      row.image_urls && row.image_urls.length > 0
-        ? row.image_urls
-        : row.image_url
-          ? [row.image_url]
-          : [],
-    image_paths:
-      row.image_paths && row.image_paths.length > 0
-        ? row.image_paths
-        : row.image_path
-          ? [row.image_path]
-          : [],
-  } satisfies BlogPost;
+  return toBlogPost(data as unknown as BlogPostRow);
 }
 
 type CommentsResult = {
@@ -222,6 +201,17 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               <h1 className="mt-5 break-words text-3xl font-black tracking-tight text-neutral-950 sm:text-4xl">
                 {post.title}
               </h1>
+
+              {/*
+                * What the post is about, when it is about something. The
+                * brand, price and shop used to be typed into the body by
+                * the compose form; carried by the post itself they can be
+                * shown as an item — and lead back to everyone else who
+                * wrote about the same one.
+                */}
+              {post.product ? (
+                <PostProductCard product={post.product} />
+              ) : null}
 
               <div className="mt-6 border-t border-neutral-200 pt-6">
                 <h2 className="text-sm font-bold uppercase tracking-[0.16em] text-neutral-500">
