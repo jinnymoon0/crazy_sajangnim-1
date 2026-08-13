@@ -7,6 +7,9 @@ export type LanguageFilter = "all" | PostLanguage;
 const HANGUL = /[가-힣ㄱ-ㆎ]/g;
 const LATIN = /[A-Za-z]/g;
 
+/* An address is not prose in any language. */
+const URL_IN_TEXT = /https?:\/\/[^\s<>"']+/gi;
+
 /*
  * Which language a post is written in, worked out from the writing
  * itself.
@@ -23,7 +26,29 @@ export function postLanguage(post: {
   title: string;
   content: string;
 }): PostLanguage {
-  const text = `${post.title} ${post.content}`;
+  /*
+   * Judged on what the person wrote, with two things taken out first.
+   *
+   * The link, because a post now carries the item's address in its
+   * body: "무난쓰" followed by an endclothing.com url is fifty Latin
+   * letters against three Korean ones, and a Korean post was being
+   * filed as English by the strength of a hostname nobody reads.
+   *
+   * And the title, because it is usually the product's name rather than
+   * the writer's language — "Human Made Dog Overalls Work Shirt" is
+   * what the shop calls it, not what the poster speaks. It is used only
+   * when the body has no letters at all, which is a post that is just a
+   * link and a photograph.
+   */
+  const body = post.content.replace(URL_IN_TEXT, " ");
+
+  const hasLetters = HANGUL.test(body) || LATIN.test(body);
+
+  /* .test with /g advances lastIndex; reset before the counting below. */
+  HANGUL.lastIndex = 0;
+  LATIN.lastIndex = 0;
+
+  const text = hasLetters ? body : `${post.title} ${body}`;
 
   const hangul = text.match(HANGUL)?.length ?? 0;
 
