@@ -112,7 +112,23 @@ function policy(nonce: string): string {
      */
     "form-action 'self'",
 
-    "upgrade-insecure-requests",
+    /*
+     * Production only, because on http://localhost it does the one thing
+     * it exists to prevent: breaking the page.
+     *
+     * Safari applies this to a page served over http, so every
+     * stylesheet, script and image the dev server offers is re-requested
+     * over https — where nothing is listening. The page arrives with no
+     * CSS at all, as raw serif text with blue underlined links, and no
+     * error says why. Chrome exempts localhost from the upgrade, so the
+     * same commit renders perfectly in one browser and not the other.
+     *
+     * Nothing is lost by leaving it out here. It upgrades insecure
+     * subresource requests, and in development the page itself is the
+     * insecure one; in production everything is already https and the
+     * directive stays exactly as it was.
+     */
+    ...(isDev ? [] : ["upgrade-insecure-requests"]),
   ].join("; ");
 }
 
