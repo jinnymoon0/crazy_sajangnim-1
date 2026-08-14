@@ -191,10 +191,7 @@ export default function HomeClient({
 
         <Header
           gender={gender}
-          onGenderChange={(nextGender) => {
-            setGender(nextGender);
-            clearFilters();
-          }}
+          onGenderChange={setGender}
           onMenuOpen={() => setSidebarOpen(true)}
         />
       </div>
@@ -257,7 +254,6 @@ export default function HomeClient({
         onClearFilters={clearFilters}
         onMarketChange={(nextMarket) => {
           setMarket(nextMarket);
-          clearFilters();
           setSidebarOpen(false);
         }}
       />

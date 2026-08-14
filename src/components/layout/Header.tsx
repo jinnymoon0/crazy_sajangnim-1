@@ -4,7 +4,7 @@ import { Menu } from "lucide-react";
 
 import AccountMenu from "@/components/auth/AccountMenu";
 import ContactUs from "@/components/contact/ContactUs";
-import type { Gender, Market } from "@/types/product";
+import type { Gender } from "@/types/product";
 
 interface HeaderProps {
   gender: Exclude<Gender, "UNISEX">;
