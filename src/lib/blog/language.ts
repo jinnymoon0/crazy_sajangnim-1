@@ -1,87 +1,120 @@
 import type { BlogPost } from "@/types/blog";
 
-export type PostLanguage = "en" | "ko";
+export type PostLanguage = "en" | "ko" | "ja" | "zh" | "es";
 export type LanguageFilter = "all" | PostLanguage;
-
-/* Hangul syllables, plus the standalone jamo used in casual writing. */
-const HANGUL = /[가-힣ㄱ-ㆎ]/g;
-const LATIN = /[A-Za-z]/g;
 
 /* An address is not prose in any language. */
 const URL_IN_TEXT = /https?:\/\/[^\s<>"']+/gi;
 
+const HANGUL = /[가-힣ㄱ-ㆎ]/g;
+/* Hiragana and katakana. Only Japanese uses them. */
+const KANA = /[ぁ-ゖァ-ヺー]/g;
+/* Han characters, shared between Japanese and Chinese. */
+const HAN = /[一-鿿㐀-䶿]/g;
+const LATIN = /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g;
+
 /*
- * Which language a post is written in, worked out from the writing
- * itself.
- *
- * Nothing records this, and the posts that exist were written before
- * anyone was asked. Counting the letters classifies the whole history
- * without a migration and without making anyone label their own post.
- *
- * A ratio rather than the mere presence of Hangul: an English post
- * naming a Korean shop is still an English post, and a reader who
- * filtered it out would lose it for one word.
+ * Spanish, told apart from English, which is the only pair here sharing
+ * an alphabet. Two signals: letters English does not have, and the
+ * small words that carry a Spanish sentence. One stopword is a
+ * coincidence — "no" and "me" are English too — so two are required.
  */
-export function postLanguage(post: {
-  title: string;
-  content: string;
-}): PostLanguage {
-  /*
-   * Judged on what the person wrote, with two things taken out first.
-   *
-   * The link, because a post now carries the item's address in its
-   * body: "무난쓰" followed by an endclothing.com url is fifty Latin
-   * letters against three Korean ones, and a Korean post was being
-   * filed as English by the strength of a hostname nobody reads.
-   *
-   * And the title, because it is usually the product's name rather than
-   * the writer's language — "Human Made Dog Overalls Work Shirt" is
-   * what the shop calls it, not what the poster speaks. It is used only
-   * when the body has no letters at all, which is a post that is just a
-   * link and a photograph.
-   */
-  const body = post.content.replace(URL_IN_TEXT, " ");
+const SPANISH_LETTERS = /[áéíóúüñ¿¡]/i;
+const SPANISH_WORDS =
+  /\b(?:el|la|los|las|un|una|unos|unas|de|del|que|qué|y|o|en|con|por|para|es|son|está|están|muy|más|pero|como|esto|esta|este|estos|estas|me|te|se|lo|mi|tu|su|gusta|quiero|tengo|hay|bien|también|cuando|donde|dónde|porque|todo|todos|nada|algo|ser|estar|hacer|puede|sí)\b/gi;
 
-  const hasLetters = HANGUL.test(body) || LATIN.test(body);
-
-  /* .test with /g advances lastIndex; reset before the counting below. */
-  HANGUL.lastIndex = 0;
-  LATIN.lastIndex = 0;
-
-  const text = hasLetters ? body : `${post.title} ${body}`;
+/*
+ * Which language a post is written in, judged on the description alone.
+ *
+ * Not the title: a post's title is usually the product's name, written
+ * by the shop that sells it. "Human Made Dog Overalls Work Shirt" is
+ * English no matter who is talking about it, and reading the language
+ * off it filed Korean posts as English.
+ *
+ * Not the link either. A post carries the item's address in its body,
+ * and a hostname is fifty Latin letters that nobody reads as prose.
+ *
+ * Null when the description has no letters at all — a post that is a
+ * photograph and a link belongs to no language, and claiming one for it
+ * would put it in front of a reader who cannot use it.
+ */
+export function postLanguage(post: { content: string }): PostLanguage | null {
+  const text = post.content.replace(URL_IN_TEXT, " ");
 
   const hangul = text.match(HANGUL)?.length ?? 0;
-
-  if (hangul === 0) {
-    return "en";
-  }
-
+  const kana = text.match(KANA)?.length ?? 0;
+  const han = text.match(HAN)?.length ?? 0;
   const latin = text.match(LATIN)?.length ?? 0;
 
+  if (hangul + kana + han + latin === 0) {
+    return null;
+  }
+
   /*
-   * Hangul is denser than the Latin alphabet — a syllable is a whole
-   * block where English spends four or five letters — so an even split
-   * of letters is already a mostly-Korean post. A quarter is about
-   * where a post stops being readable to someone who has no Korean.
+   * A character block is denser than a letter — a syllable or an
+   * ideograph is a whole word where English spends five letters — so an
+   * even count is already a mostly-CJK post. Below a quarter, a stray
+   * brand name in the original script does not move an English post.
    */
-  return hangul * 4 >= latin ? "ko" : "en";
+  const dominates = (count: number) => count > 0 && count * 4 >= latin;
+
+  /* Kana appear only in Japanese, so they settle it against Han. */
+  if (dominates(kana + han) && kana > 0) {
+    return "ja";
+  }
+
+  if (dominates(hangul)) {
+    return "ko";
+  }
+
+  /* Han with no kana and no Hangul is Chinese. */
+  if (dominates(han)) {
+    return "zh";
+  }
+
+  if (latin === 0) {
+    return null;
+  }
+
+  const spanishWords = text.match(SPANISH_WORDS)?.length ?? 0;
+
+  if (SPANISH_LETTERS.test(text) || spanishWords >= 2) {
+    return "es";
+  }
+
+  return "en";
 }
 
-export function countByLanguage(posts: BlogPost[]): Record<PostLanguage, number> {
-  return posts.reduce(
-    (counts, post) => {
-      counts[postLanguage(post)] += 1;
+export function countByLanguage(
+  posts: BlogPost[],
+): Record<PostLanguage, number> {
+  const counts: Record<PostLanguage, number> = {
+    en: 0,
+    ko: 0,
+    ja: 0,
+    zh: 0,
+    es: 0,
+  };
 
-      return counts;
-    },
-    { en: 0, ko: 0 },
-  );
+  for (const post of posts) {
+    const language = postLanguage(post);
+
+    if (language) {
+      counts[language] += 1;
+    }
+  }
+
+  return counts;
 }
 
-export const LANGUAGE_STORAGE_KEY = "blog-language-filter";
-
+/* Each named in its own language, which is how a reader finds theirs. */
 export const LANGUAGE_LABELS: Record<LanguageFilter, string> = {
-  all: "All",
+  all: "All languages",
   en: "English",
   ko: "한국어",
+  ja: "日本語",
+  zh: "中文",
+  es: "Español",
 };
+
+export const LANGUAGE_ORDER: PostLanguage[] = ["en", "ko", "ja", "zh", "es"];
