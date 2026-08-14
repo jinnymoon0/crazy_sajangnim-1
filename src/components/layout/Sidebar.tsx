@@ -1,9 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { X } from "lucide-react";
 import useSWR from "swr";
 
 import { BRANDS, type BrandSlug } from "@/constants/brands";
+import {
+  CATEGORIES,
+  type CategorySlug,
+} from "@/constants/categories";
+import type { Market } from "@/types/product";
 
 interface BrandOption {
   slug: string;
@@ -17,11 +23,8 @@ const MARKETS: { market: Market; label: string }[] = [
   { market: "KR", label: "Korea" },
   { market: "JP", label: "Japan" },
 ];
-import {
-  CATEGORIES,
-  type CategorySlug,
-} from "@/constants/categories";
-import type { Market } from "@/types/product";
+
+const BRAND_PREVIEW_LIMIT = 10;
 
 interface SidebarProps {
   open: boolean;
@@ -46,6 +49,8 @@ export function Sidebar({
   onClearFilters,
   onMarketChange,
 }: SidebarProps) {
+  const [showAllBrands, setShowAllBrands] = useState(false);
+
   /*
    * Brands are managed in the admin, so read the live list; the shipped
    * constant is the fallback while it loads or if the request fails.
@@ -85,6 +90,12 @@ export function Sidebar({
           englishName: brand.englishName,
           koreanName: brand.koreanName,
         }));
+
+  const visibleBrands = showAllBrands
+    ? brands
+    : brands.slice(0, BRAND_PREVIEW_LIMIT);
+
+  const hasMoreBrands = brands.length > BRAND_PREVIEW_LIMIT;
 
   return (
     <>
@@ -167,7 +178,7 @@ export function Sidebar({
           </div>
 
           <div className="space-y-3">
-            {brands.map((brand) => (
+            {visibleBrands.map((brand) => (
               <label
                 key={brand.slug}
                 className="flex cursor-pointer items-center justify-between gap-4 text-sm"
@@ -191,6 +202,18 @@ export function Sidebar({
               </label>
             ))}
           </div>
+
+          {hasMoreBrands ? (
+            <button
+              type="button"
+              onClick={() => setShowAllBrands((current) => !current)}
+              className="mt-5 w-full rounded-full border border-black/15 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-black hover:text-white"
+            >
+              {showAllBrands
+                ? "Show first 10"
+                : `Show all ${brands.length} brands`}
+            </button>
+          ) : null}
         </section>
 
         <section className="pt-8">
