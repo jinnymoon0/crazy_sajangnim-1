@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { affiliateUrl } from "@/lib/affiliate";
+
 import { formatPrice } from "@/lib/utils";
 import type { PostProduct } from "@/types/blog";
 
@@ -81,9 +83,9 @@ export default function PostProductCard({
 
         {product.url ? (
           <Link
-            href={product.url}
+            href={affiliateUrl(product.url)}
             target="_blank"
-            rel="noopener noreferrer nofollow"
+            rel="noopener noreferrer sponsored"
             className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-black/10 px-4 py-2.5 text-sm font-bold text-neutral-700 transition hover:border-neutral-950 hover:text-neutral-950"
           >
             View at the shop

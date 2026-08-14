@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { affiliateUrl } from "@/lib/affiliate";
+
 /*
  * Post text with its links made clickable.
  *
@@ -87,14 +89,23 @@ export default function PostText({ children }: { children: string }) {
     nodes.push(
       <a
         key={`${match.index}-${url}`}
-        href={url}
+        /*
+         * Affiliated like any other outbound link. A post about an item
+         * is the same recommendation the card above it makes, and the
+         * disclosure on the page covers both — but it does mean money
+         * can be earned from a link someone else typed, which is a
+         * choice rather than an accident. Remove this call to leave
+         * posts unmonetised; nothing else changes.
+         */
+        href={affiliateUrl(url)}
         target="_blank"
         /*
-         * nofollow because these are links a stranger typed, and
-         * noopener because the page they open must not get a handle on
+         * sponsored rather than nofollow: it is the tag search engines
+         * ask for on a link that may pay, and it implies nofollow.
+         * noopener because the page opened must not get a handle on
          * this one.
          */
-        rel="noopener noreferrer nofollow"
+        rel="noopener noreferrer sponsored"
         className="font-semibold text-neutral-950 underline decoration-neutral-400 underline-offset-4 transition hover:decoration-neutral-950"
       >
         {label(url)}

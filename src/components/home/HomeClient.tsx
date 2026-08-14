@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import AffiliateDisclosure from "@/components/AffiliateDisclosure";
 import CommunityBanner from "@/components/layout/CommunityBanner";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -288,6 +289,14 @@ export default function HomeClient({
                       : "listings"
                   }`}
             </p>
+
+            {/*
+              Beside the listings rather than in a footer nobody opens:
+              the rule in all three of these markets is that it be near
+              the links it is about. Renders as nothing until a network
+              is actually configured.
+            */}
+            <AffiliateDisclosure market={market} className="mt-3 max-w-xl" />
           </div>
 
           {/*
