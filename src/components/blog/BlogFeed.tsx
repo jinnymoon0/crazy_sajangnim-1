@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
   countByLanguage,
   LANGUAGE_LABELS,
-  LANGUAGE_STORAGE_KEY,
+  LANGUAGE_ORDER,
   type LanguageFilter,
   postLanguage,
 } from "@/lib/blog/language";
@@ -124,58 +124,15 @@ export default function BlogFeed({
   emptyMessage,
 }: BlogFeedProps) {
   /*
-   * Everything, until the browser has been asked what it reads.
+   * Everything, unless the reader asks for less.
    *
-   * Choosing a language during render would mean the server picking one
-   * and the browser disagreeing, which React reports as a hydration
-   * error. Starting on "all" is also the honest default for the moment
-   * before anything is known about the reader — no post is hidden from
-   * anyone who has not been offered the choice yet.
+   * All is the default on every visit and is not remembered: the feed
+   * is small, and a filter that silently persists is one a reader has
+   * to remember setting to explain what they are looking at. Starting
+   * open also means the server and the browser render the same thing,
+   * so there is no hydration dance and no effect at all.
    */
   const [language, setLanguage] = useState<LanguageFilter>("all");
-
-  /* Deferred a tick: the strict effect lint rejects a state update started
-   * synchronously in an effect, as in BlogPostForm. */
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      let stored: string | null = null;
-
-      try {
-        stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
-      } catch {
-        stored = null;
-      }
-
-      if (stored === "all" || stored === "en" || stored === "ko") {
-        setLanguage(stored);
-
-        return;
-      }
-
-      /*
-       * Nobody has chosen yet, so start from what the browser says its
-       * owner reads. Half the feed being in a script the reader cannot
-       * read at all is worse than a filter they can switch off in one
-       * click, and the counts beside each option say plainly what is
-       * being hidden.
-       */
-      setLanguage(
-        navigator.language.toLowerCase().startsWith("ko") ? "ko" : "en",
-      );
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  function chooseLanguage(next: LanguageFilter) {
-    setLanguage(next);
-
-    try {
-      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
-    } catch {
-      /* Private browsing. The choice simply does not outlive the visit. */
-    }
-  }
 
   const counts = countByLanguage(posts);
 
@@ -185,44 +142,35 @@ export default function BlogFeed({
       : posts.filter((post) => postLanguage(post) === language);
 
   /*
-   * Offered only when there is a mix. A blog written entirely in one
-   * language does not need a control that can only ever empty it.
+   * Only the languages somebody has actually written in. Five fixed
+   * options on a feed with two languages in it is a menu of dead ends,
+   * and the counts say what each one holds before it is chosen.
    */
-  const languages: LanguageFilter[] =
-    counts.en > 0 && counts.ko > 0 ? ["all", "en", "ko"] : [];
+  const available = LANGUAGE_ORDER.filter((code) => counts[code] > 0);
 
   const filter =
-    languages.length === 0 ? null : (
-      <div className="flex flex-wrap items-center gap-2">
-        {languages.map((option) => {
-          const total = option === "all" ? posts.length : counts[option];
+    available.length < 2 ? null : (
+      <label className="flex items-center gap-2 text-sm">
+        <span className="sr-only">Filter posts by language</span>
 
-          return (
-            <button
-              key={option}
-              type="button"
-              onClick={() => chooseLanguage(option)}
-              aria-pressed={language === option}
-              className={`min-h-9 rounded-full px-3.5 py-1.5 text-sm font-bold transition ${
-                language === option
-                  ? "bg-neutral-950 text-white"
-                  : "border border-black/10 bg-white text-neutral-600 hover:border-neutral-950 hover:text-neutral-950"
-              }`}
-            >
-              {LANGUAGE_LABELS[option]}
-              <span
-                className={
-                  language === option
-                    ? "ml-1.5 text-white/60"
-                    : "ml-1.5 text-neutral-400"
-                }
-              >
-                {total}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+        <select
+          value={language}
+          onChange={(event) =>
+            setLanguage(event.target.value as LanguageFilter)
+          }
+          className="min-h-9 rounded-full border border-black/10 bg-white px-3.5 py-1.5 text-sm font-bold text-neutral-700 transition hover:border-neutral-950 hover:text-neutral-950 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
+        >
+          <option value="all">
+            {LANGUAGE_LABELS.all} ({posts.length})
+          </option>
+
+          {available.map((code) => (
+            <option key={code} value={code}>
+              {LANGUAGE_LABELS[code]} ({counts[code]})
+            </option>
+          ))}
+        </select>
+      </label>
     );
 
   if (posts.length === 0) {
@@ -273,7 +221,7 @@ export default function BlogFeed({
 
           <button
             type="button"
-            onClick={() => chooseLanguage("all")}
+            onClick={() => setLanguage("all")}
             className="mt-4 min-h-11 rounded-xl bg-neutral-950 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-neutral-700"
           >
             Show every language
