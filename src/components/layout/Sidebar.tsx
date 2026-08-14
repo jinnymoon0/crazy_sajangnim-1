@@ -210,8 +210,8 @@ export function Sidebar({
               className="mt-5 w-full rounded-full border border-black/15 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-black hover:text-white"
             >
               {showAllBrands
-                ? "Show first 10"
-                : `Show all ${brands.length} brands`}
+                ? "Collapse"
+                : "Show all brands"}
             </button>
           ) : null}
         </section>
