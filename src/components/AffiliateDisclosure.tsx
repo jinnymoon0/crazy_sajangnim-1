@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 import { isAffiliateConfigured } from "@/lib/affiliate";
 import type { Market } from "@/types/product";
 
@@ -9,7 +13,7 @@ import type { Market } from "@/types/product";
  * 심사지침 asks for the economic relationship stated plainly; Japan's
  * 景品表示法 has required advertising to be labelled as such since the
  * stealth-marketing rules of 2023. All three of this shop's storefronts
- * are covered, which is why the wording follows the storefront.
+ * are covered, which is why the wording follows the reader.
  *
  * It renders only when a network is actually configured. A site that
  * announces commissions it does not earn is making a different false
@@ -22,13 +26,52 @@ const WORDING: Record<Market, string> = {
   JP: "当サイトのリンクの一部はアフィリエイトリンクです。リンク経由でご購入いただくと、当サイトが手数料を受け取る場合があります（価格は変わりません）。",
 };
 
+function marketFromBrowser(): Market {
+  const language = navigator.language.toLowerCase();
+
+  if (language.startsWith("ko")) {
+    return "KR";
+  }
+
+  if (language.startsWith("ja")) {
+    return "JP";
+  }
+
+  return "US";
+}
+
 export default function AffiliateDisclosure({
   market,
   className = "",
 }: {
-  market: Market;
+  /*
+   * The storefront being browsed, where the page knows it. The shop
+   * does; the blog does not, and must not borrow one from the posts —
+   * it was reading the market off whichever post happened to be newest,
+   * so a Japanese find at the top of the feed served every reader in
+   * the world a Japanese disclosure. Who is reading decides this, not
+   * where the item is sold.
+   */
+  market?: Market;
   className?: string;
 }) {
+  const [readerMarket, setReaderMarket] = useState<Market>(market ?? "US");
+
+  useEffect(() => {
+    if (market) {
+      return;
+    }
+
+    /* Deferred a tick, as elsewhere: the strict effect lint rejects a
+     * state update started synchronously in an effect. English until the
+     * browser has been asked, which is also what the server rendered. */
+    const timer = window.setTimeout(() => {
+      setReaderMarket(marketFromBrowser());
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [market]);
+
   if (!isAffiliateConfigured()) {
     return null;
   }
@@ -42,7 +85,7 @@ export default function AffiliateDisclosure({
        */
       aria-label="Affiliate disclosure"
     >
-      {WORDING[market]}
+      {WORDING[market ?? readerMarket]}
     </p>
   );
 }

@@ -266,10 +266,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
             * else — more space than the thing they came to do.
             */}
           {/* The blog links out to shops as well, so it discloses too. */}
-          <AffiliateDisclosure
-            market={product?.market ?? "US"}
-            className="mt-8 text-center"
-          />
+          <AffiliateDisclosure className="mt-8 text-center" />
 
           {productId ? (
             <div className="mt-10 text-center">
