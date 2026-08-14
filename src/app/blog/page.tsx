@@ -16,6 +16,7 @@ import {
 } from "@/lib/blog/posts";
 import { getSessionUser } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import AffiliateDisclosure from "@/components/AffiliateDisclosure";
 import ProductConversationHeader from "@/components/blog/ProductConversationHeader";
 import { productLinkMetadata } from "@/lib/blog/product-metadata";
 import type { BlogPost } from "@/types/blog";
@@ -264,6 +265,12 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
             * about one jacket was given a feed of posts about everything
             * else — more space than the thing they came to do.
             */}
+          {/* The blog links out to shops as well, so it discloses too. */}
+          <AffiliateDisclosure
+            market={product?.market ?? "US"}
+            className="mt-8 text-center"
+          />
+
           {productId ? (
             <div className="mt-10 text-center">
               <Link

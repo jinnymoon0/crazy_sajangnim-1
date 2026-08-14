@@ -7,6 +7,8 @@ import posthog from "posthog-js";
 
 import useSWR from "swr";
 
+import { affiliateNetworkFor, affiliateUrl } from "@/lib/affiliate";
+
 import { formatPrice } from "@/lib/utils";
 import {
   convert,
@@ -47,10 +49,20 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
        * it is the number worth having. Sent without awaiting: the tab
        * is about to leave, and sendBeacon outlives the page.
        */
+      /*
+       * The network goes with the click so the two halves can be put
+       * back together later: this side knows what was sent, the
+       * network's dashboard knows what arrived, and a deep-link format
+       * that has quietly stopped attributing shows up as the gap.
+       */
+      const network = affiliateNetworkFor(product.sourceUrl);
+
       posthog.capture("product_retailer_opened", {
         retailer: product.sourceName,
         brand: product.brandSlug,
         discount_percentage: product.discountPercentage,
+        affiliate_network: network,
+        affiliated: network !== null,
       });
 
       report({
@@ -60,6 +72,7 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
           brand: product.brandSlug,
           productName: product.productName,
           discount: product.discountPercentage,
+          affiliateNetwork: network,
         },
       });
 
@@ -198,7 +211,13 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
      */
     <article className="group">
       <a
-        href={product.sourceUrl}
+        /*
+         * The affiliate form when one is configured, and the retailer's
+         * own address when none is — affiliateUrl returns what it was
+         * given rather than nothing, so an unconfigured network costs a
+         * commission and never a working link.
+         */
+        href={affiliateUrl(product.sourceUrl)}
         onClick={handleOpen}
         target="_blank"
         rel="noopener noreferrer sponsored"

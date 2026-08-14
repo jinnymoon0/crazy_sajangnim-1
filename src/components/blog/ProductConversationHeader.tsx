@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { affiliateUrl } from "@/lib/affiliate";
 import { readShareDraft } from "@/lib/blog/share-draft";
 import { formatPrice } from "@/lib/utils";
 import type { PostProduct } from "@/types/blog";
@@ -121,9 +122,9 @@ export default function ProductConversationHeader({
 
           {item.url ? (
             <Link
-              href={item.url}
+              href={affiliateUrl(item.url)}
               target="_blank"
-              rel="noopener noreferrer nofollow"
+              rel="noopener noreferrer sponsored"
               className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-neutral-950 px-4 py-2.5 text-sm font-bold text-neutral-950 transition hover:bg-neutral-950 hover:!text-white"
             >
               View at the shop
