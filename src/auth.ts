@@ -28,6 +28,8 @@ interface GoogleProfile {
   hd?: string;
 }
 
+const SESSION_MAX_AGE = 30 * 24 * 60 * 60;
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Google({
@@ -42,6 +44,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
     signIn: "/login",
     error: "/login",
+  },
+
+  session: {
+    strategy: "jwt",
+    maxAge: SESSION_MAX_AGE,
+    updateAge: 24 * 60 * 60,
+  },
+
+  jwt: {
+    maxAge: SESSION_MAX_AGE,
+  },
+
+  cookies: {
+    sessionToken: {
+      options: {
+        maxAge: SESSION_MAX_AGE,
+      },
+    },
   },
 
   callbacks: {
