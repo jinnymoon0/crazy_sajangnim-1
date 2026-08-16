@@ -65,11 +65,9 @@ export function Header({
           fixed blog button off the right edge with it.
         */}
         <div className="col-span-3 flex flex-wrap items-center justify-center gap-2 lg:col-span-1 lg:col-start-3 lg:flex-nowrap lg:justify-end lg:gap-3">
-          <div className="flex items-center gap-2 rounded-full border-2 border-black px-1.5 py-1 shadow-[0_1px_0_rgba(0,0,0,0.18)]">
-            <ContactUs />
+          <ContactUs />
 
-            <AccountMenu />
-          </div>
+          <AccountMenu />
 
           {/*
             The country lives in the menu now. Two of them already made

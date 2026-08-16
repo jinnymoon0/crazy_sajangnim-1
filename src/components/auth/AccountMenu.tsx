@@ -54,7 +54,7 @@ export default function AccountMenu() {
     return (
       <Link
         href="/login"
-        className="inline-flex min-h-9 items-center justify-center rounded-full border border-black/15 bg-white px-3 text-xs font-semibold transition hover:bg-black hover:text-white md:px-4 md:text-sm"
+        className="inline-flex min-h-9 items-center justify-center rounded-full border-2 border-black bg-white px-3 text-xs font-semibold transition hover:bg-black hover:text-white md:px-4 md:text-sm"
       >
         Log in
       </Link>
