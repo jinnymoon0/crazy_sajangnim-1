@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { recordEvent, recordFailure } from "@/lib/analytics/events";
+import { getCatalogBackendConfig } from "@/lib/catalog-backend";
 
 export const runtime = "nodejs";
 
@@ -20,18 +21,15 @@ export const runtime = "nodejs";
  * reaches the client.
  */
 export async function GET(request: NextRequest) {
-  const backendUrl = process.env.BACKEND_URL?.trim();
+  const backend = getCatalogBackendConfig();
 
-  if (!backendUrl) {
-    console.error("BACKEND_URL is not configured.");
+  if (!backend.url) {
+    console.error("Catalog backend configuration failed:", backend.error);
 
-    return NextResponse.json(
-      { error: "The catalog service is not configured." },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: backend.error }, { status: 500 });
   }
 
-  const target = new URL("/api/catalog/products", backendUrl);
+  const target = new URL("/api/catalog/products", backend.url);
 
   target.search = request.nextUrl.search;
 

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { getCatalogBackendConfig } from "@/lib/catalog-backend";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -9,16 +11,18 @@ export const dynamic = "force-dynamic";
  * so the service token stays off the client.
  */
 export async function GET() {
-  const backendUrl = process.env.BACKEND_URL?.trim();
+  const backend = getCatalogBackendConfig();
 
-  if (!backendUrl) {
+  if (!backend.url) {
+    console.error("Catalog backend configuration failed:", backend.error);
+
     return NextResponse.json({ brands: [] });
   }
 
   const token = process.env.BACKEND_API_TOKEN?.trim();
 
   try {
-    const response = await fetch(new URL("/api/brands", backendUrl), {
+    const response = await fetch(new URL("/api/brands", backend.url), {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
