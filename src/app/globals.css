@@ -58,3 +58,26 @@ button {
   font-weight: 400;
   letter-spacing: 0.02em;
 }
+
+.blog-red-strip-blink {
+  outline: 4px solid #ff2a13;
+  outline-offset: 0;
+  animation: blog-red-strip-blink 1s steps(2, end) infinite;
+}
+
+@keyframes blog-red-strip-blink {
+  0%,
+  100% {
+    outline-color: #ff2a13;
+  }
+
+  50% {
+    outline-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blog-red-strip-blink {
+    animation: none;
+  }
+}
