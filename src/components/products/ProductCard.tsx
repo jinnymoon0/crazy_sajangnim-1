@@ -331,7 +331,7 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
         prefetch
         onClick={handleShare}
         aria-disabled={isSharing}
-        className={`group/share mt-3 inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 bg-[#111111] px-3 text-xs font-bold uppercase tracking-[0.1em] !text-white shadow-sm ring-4 ring-[#ff2a13] transition hover:-translate-y-0.5 hover:bg-[#d8432e] hover:shadow-md ${
+        className={`blog-red-strip-blink group/share mt-3 inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 bg-[#111111] px-3 text-xs font-bold uppercase tracking-[0.1em] !text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#d8432e] hover:shadow-md ${
           isSharing ? "bg-[#d8432e]" : ""
         }`}
       >
