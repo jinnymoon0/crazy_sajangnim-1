@@ -55,7 +55,6 @@ export default function CommunityBanner() {
           * used on the floating button: something is happening here.
           */}
         <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#d8432e] opacity-75 group-hover/banner:bg-white" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-[#d8432e] group-hover/banner:bg-white" />
         </span>
 

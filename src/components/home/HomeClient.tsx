@@ -212,7 +212,7 @@ export default function HomeClient({
       <Link
         href="/blog"
         aria-label="Open the clothing blog"
-        className="blog-red-strip group/blog fixed bottom-6 right-6 z-50 inline-flex min-h-14 items-center justify-center gap-2.5 px-7 py-4 text-sm font-bold !text-white shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl"
+        className="blog-red-strip group/blog fixed right-6 bottom-6 z-50 inline-flex min-h-14 items-center justify-center gap-2.5 rounded-full px-7 py-4 text-sm font-bold !text-white shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl"
       >
         <svg
           aria-hidden="true"
@@ -236,10 +236,9 @@ export default function HomeClient({
         */}
         <span
           aria-hidden="true"
-          className="absolute -right-1 -top-1 flex h-3.5 w-3.5"
+          className="absolute -top-2 -right-2 rounded-full bg-[#ff2a13] px-2 py-0.5 text-[10px] leading-none font-black tracking-[0.12em] text-white ring-2 ring-white"
         >
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#d8432e] opacity-70 motion-reduce:hidden" />
-          <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-[#d8432e] ring-2 ring-white" />
+          LIVE
         </span>
       </Link>
 
