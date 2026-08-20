@@ -236,9 +236,10 @@ export default function HomeClient({
         */}
         <span
           aria-hidden="true"
-          className="absolute -top-2 -right-2 rounded-full bg-[#ff2a13] px-2 py-0.5 text-[10px] leading-none font-black tracking-[0.12em] text-white ring-2 ring-white"
+          className="absolute -top-1 -right-1 flex h-3.5 w-3.5"
         >
-          LIVE
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ff2a13] opacity-70 motion-reduce:hidden" />
+          <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-[#ff2a13] ring-2 ring-white" />
         </span>
       </Link>
 
