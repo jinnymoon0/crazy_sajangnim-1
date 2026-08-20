@@ -331,9 +331,7 @@ export function ProductCard({ product, isSignedIn }: ProductCardProps) {
         prefetch
         onClick={handleShare}
         aria-disabled={isSharing}
-        className={`blog-red-strip-blink group/share mt-3 inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 bg-[#111111] px-3 text-xs font-bold uppercase tracking-[0.1em] !text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#d8432e] hover:shadow-md ${
-          isSharing ? "bg-[#d8432e]" : ""
-        }`}
+        className="blog-red-strip group/share mt-3 inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 px-3 text-xs font-bold uppercase tracking-[0.1em] !text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
       >
         {/* A speech mark says "write about this" faster than the words do. */}
         <svg
