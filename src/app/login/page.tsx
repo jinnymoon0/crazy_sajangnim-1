@@ -37,11 +37,12 @@ type LoginPageProps = {
   searchParams: Promise<{
     error?: string;
     callbackUrl?: string;
+    accountDeleted?: string;
   }>;
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const { error, callbackUrl } = await searchParams;
+  const { error, callbackUrl, accountDeleted } = await searchParams;
 
   /*
    * Only our own paths: a callback taken from the query could otherwise
@@ -72,6 +73,15 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       </p>
 
       <section className="w-full max-w-md rounded-3xl border border-black/10 bg-white p-6 shadow-sm sm:p-8">
+        {accountDeleted === "1" ? (
+          <p
+            role="status"
+            className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"
+          >
+            Your account has been deleted.
+          </p>
+        ) : null}
+
         {error ? (
           <p
             role="status"

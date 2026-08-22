@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AffiliateDisclosure from "@/components/AffiliateDisclosure";
 import CommunityBanner from "@/components/layout/CommunityBanner";
+import Footer from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ProductGrid } from "@/components/products/ProductGrid";
@@ -338,6 +339,8 @@ export default function HomeClient({
           <ProductGrid products={products} isSignedIn={isSignedIn} />
         )}
       </section>
+
+      <Footer />
     </main>
   );
 }
