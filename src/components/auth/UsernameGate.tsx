@@ -14,7 +14,10 @@ export default function UsernameGate() {
   useEffect(() => {
     if (
       pathname.startsWith("/choose-username") ||
-      pathname.startsWith("/login")
+      pathname.startsWith("/login") ||
+      pathname.startsWith("/account") ||
+      pathname.startsWith("/privacy") ||
+      pathname.startsWith("/terms")
     ) {
       return;
     }

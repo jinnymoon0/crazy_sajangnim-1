@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { LogOut, UserRound } from "lucide-react";
 import { signOut } from "next-auth/react";
 import posthog from "posthog-js";
 
@@ -71,9 +72,11 @@ export default function AccountMenu() {
         shape, so a signed-in header read as three buttons with a stray
         avatar wedged between them rather than as one set of controls.
       */}
-      <span
+      <Link
+        href="/account"
+        aria-label="Open account settings"
         title={displayName}
-        className="inline-flex min-h-9 max-w-32 items-center gap-2 rounded-full border border-black/15 bg-white px-3 md:max-w-44 md:px-4"
+        className="inline-flex min-h-9 max-w-32 items-center gap-2 rounded-full border border-black/15 bg-white px-3 transition hover:bg-black hover:text-white md:max-w-44 md:px-4"
       >
         {user.picture ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -88,17 +91,27 @@ export default function AccountMenu() {
         <span className="truncate text-xs font-semibold md:text-sm">
           {displayName}
         </span>
-      </span>
+      </Link>
+
+      <Link
+        href="/account"
+        aria-label="Open account settings"
+        className="inline-flex min-h-9 items-center justify-center rounded-full border border-black/15 bg-white px-3 text-xs font-semibold transition hover:bg-black hover:text-white md:px-4 md:text-sm"
+      >
+        <UserRound size={15} aria-hidden="true" />
+      </Link>
 
       <button
         type="button"
+        aria-label="Log out"
         onClick={() => {
           posthog.reset();
           void signOut({ callbackUrl: "/login" });
         }}
-        className="inline-flex min-h-9 items-center justify-center rounded-full border border-black/15 bg-white px-3 text-xs font-semibold transition hover:bg-black hover:text-white md:px-4 md:text-sm"
+        className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-black/15 bg-white px-3 text-xs font-semibold transition hover:bg-black hover:text-white md:px-4 md:text-sm"
       >
-        Log out
+        <LogOut size={15} aria-hidden="true" />
+        <span className="hidden sm:inline">Log out</span>
       </button>
     </div>
   );
