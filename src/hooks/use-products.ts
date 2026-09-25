@@ -1,48 +1,18 @@
 "use client";
 
-import useSWR from "swr";
+import { useEffect } from "react";
+import useSWR, { useSWRConfig } from "swr";
 
-import type { Gender, Market, Product, ProductSort } from "@/types/product";
-
-interface ProductResponse {
-  products: Product[];
-
-  page: number;
-  size: number;
-  total: number;
-  hasMore: boolean;
-
-  market: Market;
-  gender: Exclude<Gender, "UNISEX">;
-
-  updatedAt: string;
-}
-
-interface ErrorResponse {
-  error?: string;
-}
-
-async function fetcher(url: string): Promise<ProductResponse> {
-  const response = await fetch(url);
-
-  const body = (await response.json()) as ProductResponse | ErrorResponse;
-
-  if (!response.ok) {
-    throw new Error(
-      "error" in body && body.error
-        ? body.error
-        : "Unable to load product listings.",
-    );
-  }
-
-  return body as ProductResponse;
-}
+import { fetchProducts, type ProductResponse } from "@/lib/catalog-client";
+import type { Gender, Market, ProductSort } from "@/types/product";
 
 export function useProducts(
   market: Market,
   gender: Exclude<Gender, "UNISEX">,
   sort: ProductSort = "newest",
 ) {
+  const { mutate } = useSWRConfig();
+
   /*
    * The chosen order is asked of the service, not applied afterwards.
    *
@@ -61,9 +31,9 @@ export function useProducts(
     sort,
   });
 
-  return useSWR<ProductResponse>(
+  const result = useSWR<ProductResponse>(
     `/api/catalog/products?${query.toString()}`,
-    fetcher,
+    fetchProducts,
     {
       /*
        * Refresh when someone comes back to the tab. Polling is paused
@@ -120,4 +90,20 @@ export function useProducts(
       revalidateIfStale: true,
     },
   );
+
+  /*
+   * A successful catalog response is the authoritative signal that the
+   * prices have been checked again. Refresh the exchange table at that
+   * same boundary so converted prices cannot trail a catalog update just
+   * because the two five-minute timers started a few seconds apart.
+   */
+  useEffect(() => {
+    if (!result.data?.updatedAt) {
+      return;
+    }
+
+    void mutate("/api/rates");
+  }, [mutate, result.data?.updatedAt]);
+
+  return result;
 }
