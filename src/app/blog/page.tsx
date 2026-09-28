@@ -145,7 +145,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
   const product = posts.find((post) => post.product)?.product ?? null;
 
   return (
-    <main className="min-h-screen bg-neutral-100">
+    <main className="min-h-screen bg-[#f5f2ea]">
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         {/*
           * Compact when the page is about an item: the item's own card
@@ -166,7 +166,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
                 </p>
               ) : (
                 <>
-                  <h1 className="mt-3 text-4xl font-black tracking-tight text-neutral-950 sm:text-5xl">
+                  <h1 className="font-diploma mt-3 text-4xl text-neutral-950 sm:text-5xl">
                     Clothing Blog
                   </h1>
 

@@ -202,7 +202,7 @@ export default function ContactUs() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex min-h-9 items-center justify-center rounded-full border-2 border-black bg-sky-400 px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-500 md:px-4 md:text-sm"
+        className="inline-flex min-h-9 items-center justify-center rounded-full border-2 border-[#ff2a13] bg-[#111111] px-3 text-xs font-semibold text-white shadow-sm transition hover:shadow-md md:px-4 md:text-sm"
       >
         Contact us
       </button>
